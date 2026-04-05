@@ -101,3 +101,29 @@ func TestIntegrationOAuthLoginFlow(t *testing.T) {
 
 	assert.Equal(t, "admin@example.com", resp.Header.Get("X-User-Claim-Email"))
 }
+
+func TestIntegrationOAuthLoginFlowWithTokenParams(t *testing.T) {
+	client := httpClient()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://caddy/token-params", nil)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	assert.NoError(t, err)
+
+	resp, _ := checkResponse(t, client, req, http.StatusOK) // Initiate login flow
+
+	loginCallbackActionUrl, _ := getFormAction(resp.Body)
+
+	formData := url.Values{}
+	formData.Set("login", "admin@example.com")
+	formData.Set("password", "password")
+
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodPost, "http://oidc-provider"+loginCallbackActionUrl, strings.NewReader(formData.Encode()))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, _ = checkResponse(t, client, req, http.StatusOK)
+
+	data, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Contains(t, string(data), "admin@example.com")
+}

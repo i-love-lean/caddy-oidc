@@ -103,6 +103,37 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 			}`,
 			expect: `{"client_id":"", "issuer":""}`,
 		},
+		{
+			name: "token_params configuration",
+			input: `{
+				issuer http://openid/example
+				client_id xyz
+				token_params {
+					client_assertion_type urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+					client_assertion {file./var/run/secrets/token}
+				}
+			}`,
+			shouldErr: false,
+			expect: `{
+  "issuer": "http://openid/example",
+  "client_id": "xyz",
+  "token_params": {
+    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    "client_assertion": "{file./var/run/secrets/token}"
+  }
+}`,
+		},
+		{
+			name: "token_params missing value",
+			input: `{
+				issuer http://openid/example
+				client_id xyz
+				token_params {
+					client_assertion_type
+				}
+			}`,
+			shouldErr: true,
+		},
 	}
 
 	for _, tt := range tests {

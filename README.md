@@ -59,15 +59,16 @@ example.com {
 
 ## Global Directive
 
-| Option                        | Description                                                                                                             | Default  |
-|-------------------------------|-------------------------------------------------------------------------------------------------------------------------|----------|
-| `issuer`                      | The OIDC issuer URL                                                                                                     |          |
-| `client_id`                   | The OIDC client ID                                                                                                      |          |
-| `tls_insecure_skip_verify`    | (optional) Skip TLS certificate verification with the OIDC provider.                                                    |          |
-| `scope`                       | (optional) The scope to request from the OIDC provider. The `openid` scope is required for browser-based login to work. | `openid` |
-| `username`                    | (optional) The claim to use as the username. Defaults to `sub`.                                                         | `sub`    |
-| `protected_resource_metadata` | (optional) Configure or disable RFC9728 support.                                                                        |          |
-| `authenticate`                | (optional) Configure [authentication methods](#authentication)                                                          |
+| Option                             | Description                                                                                                                            | Default                      |
+|------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|------------------------------|
+| `issuer`                           | The OIDC issuer URL                                                                                                                    |                              |
+| `client_id`                        | The OIDC client ID                                                                                                                     |                              |
+| `tls_insecure_skip_verify`         | (optional) Skip TLS certificate verification with the OIDC provider.                                                                   |                              |
+| `scope`                            | (optional) The scope to request from the OIDC provider. The `openid` scope is required for browser-based login to work.                | `openid`                     |
+| `username`                         | (optional) The claim to use as the username. Defaults to `sub`.                                                                        | `sub`                        |
+| `protected_resource_metadata`      | (optional) Configure or disable RFC9728 support.                                                                                       |                              |
+| `authenticate`                     | (optional) Configure [authentication methods](#authentication)                                                                         |                              |
+| `token_params`                     | (optional) Additional key-value parameters for the OAuth code exchange. Values support Caddy placeholders. See [Token Parameters](#token-parameters). |                              |
 
 ### Authentication
 
@@ -127,6 +128,53 @@ This behavior can be disabled by adding the `preserve_request` option.
 ```caddyfile
 authenticate preserve_request
 ```
+
+#### Token Parameters
+
+The `token_params` block allows you to add arbitrary key-value parameters to the OAuth code exchange request.
+Values support [Caddy placeholders](https://caddyserver.com/docs/conventions#placeholders), which are resolved at exchange time.
+
+This is useful for authentication flows that require extra parameters beyond the standard OAuth2 fields,
+such as JWT bearer client assertions ([RFC 7523](https://datatracker.ietf.org/doc/html/rfc7523)).
+
+```caddyfile
+token_params {
+    client_assertion_type urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+    client_assertion {file./var/run/secrets/token}
+}
+```
+
+The `{file.*}` placeholder reads its value from disk on every evaluation, making it suitable for tokens that rotate (e.g., projected Kubernetes service account tokens).
+
+#### Workload Identity Federation
+
+Workload Identity Federation (WIF) allows `caddy-oidc` to authenticate with an OIDC provider **without a `client_secret`**.
+Instead, a projected Kubernetes service account token is exchanged for a provider access token using a JWT bearer assertion ([RFC 7523](https://datatracker.ietf.org/doc/html/rfc7523)).
+
+This is commonly used with **Microsoft Entra ID** (Azure AD) on OpenShift or AKS clusters where a federated credential is configured on the App Registration.
+
+Using [`token_params`](#token-parameters) with the `{file.*}` placeholder, the projected token is re-read from the filesystem on every token exchange, so token rotation is handled automatically.
+
+```caddyfile
+{
+    oidc entra {
+        issuer https://login.microsoftonline.com/{tenant}/v2.0
+        client_id "<client_id>"
+        token_params {
+            client_assertion_type urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+            client_assertion {file./var/run/secrets/openshift/serviceaccount/token}
+        }
+        scope openid email profile
+        authenticate cookie {
+            name caddy
+            secret "{env.COOKIE_SECRET}"
+        }
+    }
+}
+```
+
+> [!NOTE]
+> While the underlying mechanism (RFC 7523 JWT bearer client assertions) is a standard, this pattern has been tested with Microsoft Entra ID federated credentials. The same `token_params` approach can be adapted for other providers that accept custom parameters during the token exchange.
 
 #### Bearer
 

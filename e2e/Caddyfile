@@ -1,33 +1,61 @@
 {
-    auto_https off
-    log {
-        level DEBUG
-    }
+	auto_https off
+	log {
+		level DEBUG
+	}
 
-    oidc example {
-        issuer http://oidc-provider/example
-        client_id xyz
-        scope openid email
-        username email
-        authenticate cookie {
-            name caddy
-            secret {env.COOKIE_SECRET}
-            insecure
-        }
-    }
+	oidc example {
+		issuer http://oidc-provider/example
+		client_id xyz
+		scope openid email
+		username email
+		authenticate cookie {
+			name caddy
+			secret {env.COOKIE_SECRET}
+			insecure
+		}
+	}
+
+	oidc example_with_token_params {
+		issuer http://oidc-provider/example
+		client_id xyz
+		scope openid email
+		username email
+		token_params {
+			custom_param test_value
+		}
+		authenticate cookie {
+			name caddy_tp
+			secret {env.COOKIE_SECRET}
+			insecure
+			redirect_url /token-params/oauth2/callback
+		}
+	}
 }
 
 http:// {
-    log
+	log
 
-    oidc example {
-        allow {
-            user admin@example.com
-        }
-    }
+	handle /token-params* {
+		oidc example_with_token_params {
+			allow {
+				user admin@example.com
+			}
+		}
 
-    header X-User-Claim-Email "{http.auth.user.claim.email}" {
-        defer
-    }
-    respond "{http.auth.user.id}"
+		respond "{http.auth.user.id}"
+	}
+
+	handle {
+		oidc example {
+			allow {
+				user admin@example.com
+			}
+		}
+
+		header X-User-Claim-Email "{http.auth.user.claim.email}" {
+			defer
+		}
+		respond "{http.auth.user.id}"
+	}
 }
