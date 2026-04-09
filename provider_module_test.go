@@ -30,7 +30,7 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 					name session_id
 					same_site strict
 					insecure
-					secret 7DFSrbya1rvBBmcaxD
+					secret gdkCwfGeY7yYMkQcvB8jUqgV1YwgBjAb
 					claim email role
 					redirect_url http://localhost/oauth/callback
 				}
@@ -57,7 +57,7 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
         "name": "session_id",
         "same_site": "strict",
         "insecure": true,
-        "secret": "7DFSrbya1rvBBmcaxD",
+        "secret": "gdkCwfGeY7yYMkQcvB8jUqgV1YwgBjAb",
         "claims": [
           "email",
           "role"
@@ -107,6 +107,8 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COOKIE_SECRET", "VTQOz22ZZiyYNciwtDyckU1aJWQSCXnm")
+
 			module := new(OIDCProviderModule)
 			d := caddyfile.NewTestDispenser(tt.input)
 
@@ -119,8 +121,6 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-
-			t.Setenv("COOKIE_SECRET", "meFG!C9$4zSrHcM6AuQMDv*Wmywc!qQA")
 
 			jsonBytes, err := json.Marshal(module)
 			require.NoError(t, err)
