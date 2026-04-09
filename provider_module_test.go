@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name      string
 		input     string
@@ -31,7 +30,7 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 					name session_id
 					same_site strict
 					insecure
-					secret 7DFSrbya1rvBBmcaxD
+					secret gdkCwfGeY7yYMkQcvB8jUqgV1YwgBjAb
 					claim email role
 					redirect_url http://localhost/oauth/callback
 				}
@@ -58,7 +57,7 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
         "name": "session_id",
         "same_site": "strict",
         "insecure": true,
-        "secret": "7DFSrbya1rvBBmcaxD",
+        "secret": "gdkCwfGeY7yYMkQcvB8jUqgV1YwgBjAb",
         "claims": [
           "email",
           "role"
@@ -98,11 +97,17 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 			}`,
 			shouldErr: true,
 		},
+		{
+			name: "with defaults",
+			input: `{
+			}`,
+			expect: `{"client_id":"", "issuer":""}`,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			t.Setenv("COOKIE_SECRET", "VTQOz22ZZiyYNciwtDyckU1aJWQSCXnm")
 
 			module := new(OIDCProviderModule)
 			d := caddyfile.NewTestDispenser(tt.input)
@@ -120,6 +125,12 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 			jsonBytes, err := json.Marshal(module)
 			require.NoError(t, err)
 			assert.JSONEq(t, tt.expect, string(jsonBytes))
+
+			ctx, cancel := caddy.NewContext(caddy.Context{Context: t.Context()})
+			defer cancel()
+
+			err = module.Provision(ctx)
+			require.NoError(t, err)
 		})
 	}
 }

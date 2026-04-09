@@ -184,7 +184,7 @@ func (au *SessionCookieAuthenticator) Provision(_ caddy.Context) error {
 	}
 
 	if len(au.Secret) != 32 && len(au.Secret) != 64 {
-		return errors.New("secret must be 32 or 64 bytes")
+		return fmt.Errorf("secret must be 32 or 64 bytes long (given %d)", len(au.Secret))
 	}
 
 	au.secure = securecookie.New([]byte(au.Secret), []byte(au.Secret))
