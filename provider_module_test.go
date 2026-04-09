@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name      string
 		input     string
@@ -98,12 +97,16 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 			}`,
 			shouldErr: true,
 		},
+		{
+			name: "with defaults",
+			input: `{
+			}`,
+			expect: `{"client_id":"", "issuer":""}`,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			module := new(OIDCProviderModule)
 			d := caddyfile.NewTestDispenser(tt.input)
 
@@ -117,9 +120,17 @@ func TestOIDCProvider_UnmarshalCaddyfile(t *testing.T) {
 
 			require.NoError(t, err)
 
+			t.Setenv("COOKIE_SECRET", "meFG!C9$4zSrHcM6AuQMDv*Wmywc!qQA")
+
 			jsonBytes, err := json.Marshal(module)
 			require.NoError(t, err)
 			assert.JSONEq(t, tt.expect, string(jsonBytes))
+
+			ctx, cancel := caddy.NewContext(caddy.Context{Context: t.Context()})
+			defer cancel()
+
+			err = module.Provision(ctx)
+			require.NoError(t, err)
 		})
 	}
 }
