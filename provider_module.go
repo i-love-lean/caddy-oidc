@@ -42,6 +42,11 @@ type OIDCProviderModule struct {
 	Authenticators            *authenticator.Set                      `json:"authenticators,omitempty"`
 	TLSInsecureSkipVerify     bool                                    `json:"tls_insecure_skip_verify,omitempty"`
 	ProtectedResourceMetadata *ProtectedResourceMetadataConfiguration `json:"protected_resource_metadata,omitempty"`
+
+	// TokenParams is an arbitrary map of additional key-values to set as URL parameters
+	// when performing a code exchange. Values support Caddy placeholders such as
+	// {file./path/to/secret} and {env.VAR} which are resolved at exchange time.
+	TokenParams map[string]string `json:"token_params,omitempty"`
 }
 
 func (*OIDCProviderModule) CaddyModule() caddy.ModuleInfo {
@@ -99,6 +104,19 @@ func (m *OIDCProviderModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			}
 		case "tls_insecure_skip_verify":
 			m.TLSInsecureSkipVerify = true
+		case "token_params":
+			m.TokenParams = make(map[string]string)
+
+			for nesting := d.Nesting(); d.NextBlock(nesting); {
+				key := d.Val()
+
+				var value string
+				if !d.Args(&value) {
+					return d.ArgErr()
+				}
+
+				m.TokenParams[key] = value
+			}
 		case "scope":
 			m.Scope = append(m.Scope, d.RemainingArgs()...)
 		default:
@@ -197,19 +215,22 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 
 				log.Debug("OIDC provider discovery successful", zap.Any("discovery", provider.Endpoint()))
 
+				oauthClient := &oauth2ConfigWithHTTPClient{
+					httpClient: httpClient,
+					Config: &oauth2.Config{
+						ClientID: m.ClientID,
+						Endpoint: provider.Endpoint(),
+						Scopes:   m.Scope,
+					},
+					tokenParams: m.TokenParams,
+				}
+
 				return &providerDiscoveryConfiguration{
 					Verifier: provider.Verifier(&oidc.Config{
 						ClientID: m.ClientID,
 					}),
 					UserInfo: provider,
-					OAuth2: &oauth2ConfigWithHTTPClient{
-						httpClient: httpClient,
-						Config: &oauth2.Config{
-							ClientID: m.ClientID,
-							Endpoint: provider.Endpoint(),
-							Scopes:   m.Scope,
-						},
-					},
+					OAuth2:   oauthClient,
 				}, nil
 			}),
 		}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/relvacode/caddy-oidc/authenticator"
@@ -28,11 +29,21 @@ type oauth2Client interface {
 type oauth2ConfigWithHTTPClient struct {
 	*oauth2.Config
 
-	httpClient *http.Client
+	httpClient  *http.Client
+	tokenParams map[string]string
 }
 
 func (c *oauth2ConfigWithHTTPClient) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
+
+	if len(c.tokenParams) > 0 {
+		repl, ok := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+		if ok {
+			for k, v := range c.tokenParams {
+				opts = append(opts, oauth2.SetAuthURLParam(k, repl.ReplaceAll(v, "")))
+			}
+		}
+	}
 
 	return c.Config.Exchange(ctx, code, opts...)
 }
