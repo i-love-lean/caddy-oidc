@@ -201,8 +201,6 @@ func (set *Set) StripRequest(r *http.Request) {
 }
 
 // GetAuthenticator returns the first RequestAuthenticator in the set equal to the requested type.
-//
-//nolint:ireturn
 func GetAuthenticator[T RequestAuthenticator](set *Set) (T, bool) {
 	findType := reflect.TypeOf(*new(T))
 	for _, authenticator := range set.Authenticators {

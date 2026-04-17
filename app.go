@@ -59,7 +59,6 @@ func parseGlobalConfig(d *caddyfile.Dispenser, prev any) (any, error) {
 	}, nil
 }
 
-//nolint:ireturn
 func parseCaddyfileHandler[T any, Ptr interface {
 	*T
 	caddyfile.Unmarshaler

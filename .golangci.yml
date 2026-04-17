@@ -9,6 +9,7 @@ linters:
     - testpackage
     - goconst
     - exhaustruct
+    - ireturn
   exclusions:
     rules:
       - path: '(.+)_test\.go'
