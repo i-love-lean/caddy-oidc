@@ -37,14 +37,15 @@ func (c *oauth2ConfigWithHTTPClient) Exchange(ctx context.Context, code string, 
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
 
 	if len(c.tokenParams) > 0 {
+		//nolint:forcetypeassert // Caddy will always provide a replacer in the context. A missing replacer will result in a panic.
 		repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-		for k, v := range c.tokenParams {
+		for urlParam, v := range c.tokenParams {
 			pv, err := repl.ReplaceOrErr(v, false, true)
 			if err != nil {
-				return nil, fmt.Errorf("failed to replace token param %s: %w", k, err)
+				return nil, fmt.Errorf("failed to replace token param %s: %w", urlParam, err)
 			}
 
-			opts = append(opts, oauth2.SetAuthURLParam(k, pv))
+			opts = append(opts, oauth2.SetAuthURLParam(urlParam, pv))
 		}
 	}
 

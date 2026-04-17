@@ -26,8 +26,6 @@ func Defer[T any](deferFunc func() (T, error)) *DeferredResult[T] {
 }
 
 // Get blocks until the background process is finished or the context is canceled.
-//
-//nolint:ireturn
 func (d *DeferredResult[T]) Get(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():
