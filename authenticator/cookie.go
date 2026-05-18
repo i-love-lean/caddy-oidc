@@ -188,7 +188,7 @@ func (au *SessionCookieAuthenticator) Provision(_ caddy.Context) error {
 	}
 
 	var hashKey, blockKey []byte
-	if len(au.Secret) == 64 {
+	if len(au.Secret) == 64 { //nolint:mnd // 64-byte secret is intentionally split into two 32-byte keys (HMAC + AES-256)
 		hashKey = []byte(au.Secret[:32])
 		blockKey = []byte(au.Secret[32:])
 	} else {
