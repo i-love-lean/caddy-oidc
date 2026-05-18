@@ -68,6 +68,7 @@ func (*OIDCProviderModule) CaddyModule() caddy.ModuleInfo {
 		protected_resource <protected_resource>
 	}
 */
+//nolint:gocognit // function is long due to Caddyfile parsing structure
 func (m *OIDCProviderModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
 		switch d.Val() {
