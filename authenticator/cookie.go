@@ -187,7 +187,16 @@ func (au *SessionCookieAuthenticator) Provision(_ caddy.Context) error {
 		return fmt.Errorf("secret must be 32 or 64 bytes long (given %d)", len(au.Secret))
 	}
 
-	au.secure = securecookie.New([]byte(au.Secret), []byte(au.Secret))
+	var hashKey, blockKey []byte
+	if len(au.Secret) == 64 { //nolint:mnd // 64-byte secret is intentionally split into two 32-byte keys (HMAC + AES-256)
+		hashKey = []byte(au.Secret[:32])
+		blockKey = []byte(au.Secret[32:])
+	} else {
+		hashKey = []byte(au.Secret)
+		blockKey = []byte(au.Secret)
+	}
+
+	au.secure = securecookie.New(hashKey, blockKey)
 	au.secure.SetSerializer(&securecookie.JSONEncoder{})
 
 	if au.RedirectURL == "" {

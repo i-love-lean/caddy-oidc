@@ -37,6 +37,7 @@ var _ caddyfile.Unmarshaler = (*OIDCProviderModule)(nil)
 type OIDCProviderModule struct {
 	Issuer                    string                                  `json:"issuer"`
 	ClientID                  string                                  `json:"client_id"`
+	ClientSecret              string                                  `json:"client_secret,omitempty"`
 	Scope                     []string                                `json:"scope,omitempty"`
 	Username                  string                                  `json:"username,omitempty"`
 	Authenticators            *authenticator.Set                      `json:"authenticators,omitempty"`
@@ -67,6 +68,7 @@ func (*OIDCProviderModule) CaddyModule() caddy.ModuleInfo {
 		protected_resource <protected_resource>
 	}
 */
+//nolint:gocognit // function is long due to Caddyfile parsing structure
 func (m *OIDCProviderModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
 		switch d.Val() {
@@ -76,6 +78,10 @@ func (m *OIDCProviderModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			}
 		case "client_id":
 			if !d.Args(&m.ClientID) {
+				return d.ArgErr()
+			}
+		case "client_secret":
+			if !d.Args(&m.ClientSecret) {
 				return d.ArgErr()
 			}
 
@@ -218,9 +224,10 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 				oauthClient := &oauth2ConfigWithHTTPClient{
 					httpClient: httpClient,
 					Config: &oauth2.Config{
-						ClientID: m.ClientID,
-						Endpoint: provider.Endpoint(),
-						Scopes:   m.Scope,
+						ClientID:     m.ClientID,
+						ClientSecret: m.ClientSecret,
+						Endpoint:     provider.Endpoint(),
+						Scopes:       m.Scope,
 					},
 					tokenParams: m.TokenParams,
 				}

@@ -225,6 +225,33 @@ func TestSessionCookieAuthenticator_AuthenticateRequest_SessionExpired(t *testin
 	assert.ErrorAs(t, err, &ee)
 }
 
+func TestSessionCookieAuthenticator_Provision_64ByteSecret(t *testing.T) {
+	t.Parallel()
+
+	var au = &SessionCookieAuthenticator{
+		Name:   "test-cookie",
+		Secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}
+
+	ctx, cancel := caddy.NewContext(caddy.Context{Context: context.Background()})
+	defer cancel()
+
+	err := au.Provision(ctx)
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	s := &session.Session{UID: "test"}
+	cookieValue, err := au.secure.Encode(au.Name, s)
+	require.NoError(t, err)
+
+	r.AddCookie(au.NewCookie(cookieValue))
+
+	session, err := au.AuthenticateRequest(&pkgtest.TestOIDCConfiguration{}, r)
+	require.NoError(t, err)
+	assert.Equal(t, "test", session.UID)
+}
+
 func TestSessionCookieAuthenticator_StripRequest(t *testing.T) {
 	t.Parallel()
 

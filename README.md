@@ -44,6 +44,18 @@ The global directive is used to configure the OIDC provider. An example minimum 
 }
 ```
 
+For confidential OIDC clients that require a client secret, use the `client_secret` directive:
+
+```caddyfile
+{
+    oidc example {
+        issuer https://accounts.google.com
+        client_id "<client_id>"
+        client_secret "{env.OIDC_CLIENT_SECRET}"
+    }
+}
+```
+
 Each route then uses the `oidc` directive to configure the route using the named provider
 
 ```caddyfile
@@ -63,6 +75,7 @@ example.com {
 |------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|------------------------------|
 | `issuer`                           | The OIDC issuer URL                                                                                                                    |                              |
 | `client_id`                        | The OIDC client ID                                                                                                                     |                              |
+| `client_secret`                    | (optional) The OIDC client secret for confidential clients.                                                                            |                              |
 | `tls_insecure_skip_verify`         | (optional) Skip TLS certificate verification with the OIDC provider.                                                                   |                              |
 | `scope`                            | (optional) The scope to request from the OIDC provider. The `openid` scope is required for browser-based login to work.                | `openid`                     |
 | `username`                         | (optional) The claim to use as the username. Defaults to `sub`.                                                                        | `sub`                        |
