@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -17,6 +19,7 @@ import (
 	"github.com/relvacode/caddy-oidc/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 func TestSessionCookieAuthenticator_UnmarshalCaddyfile(t *testing.T) {
@@ -278,4 +281,117 @@ func TestSessionCookieAuthenticator_StripRequest(t *testing.T) {
 		assert.Equal(t, "some-other-cookie=foobar", cookies[0].String())
 		assert.Equal(t, "some-second-cookie=barfoo", cookies[1].String())
 	}
+}
+
+type testHandleCallbackConfiguration struct {
+	pkgtest.TestOIDCConfiguration
+
+	userInfo *oidc.UserInfo
+	expires  time.Time
+}
+
+func (cfg *testHandleCallbackConfiguration) AuthCodeURL(_ context.Context, _ string, _ ...oauth2.AuthCodeOption) (string, error) {
+	return "", nil
+}
+
+func (cfg *testHandleCallbackConfiguration) Exchange(_ context.Context, _ string, _ ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return (&oauth2.Token{
+		AccessToken: "test-access-token",
+		TokenType:   "Bearer",
+		Expiry:      cfg.expires,
+	}).WithExtra(map[string]any{
+		"id_token": pkgtest.GenerateTestJWTExpiresAt(cfg.expires),
+	}), nil
+}
+
+func (cfg *testHandleCallbackConfiguration) UserInfo(_ context.Context, _ oauth2.TokenSource) (*oidc.UserInfo, error) {
+	return cfg.userInfo, nil
+}
+
+func newTestUserInfo(t *testing.T, claims string) *oidc.UserInfo {
+	t.Helper()
+
+	userInfo := new(oidc.UserInfo)
+	claimsField := reflect.ValueOf(userInfo).Elem().FieldByName("claims")
+	require.True(t, claimsField.IsValid())
+
+	//nolint:gosec // This is only used for testing
+	reflect.NewAt(claimsField.Type(), unsafe.Pointer(claimsField.UnsafeAddr())).
+		Elem().
+		SetBytes([]byte(claims))
+
+	return userInfo
+}
+
+func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *testing.T) {
+	t.Parallel()
+
+	au := &SessionCookieAuthenticator{
+		Name:   "test-cookie",
+		Secret: "Y4lbVNr01M4NyBCUSNbrAL4cavA6kjdM",
+		Claims: []string{"preferred_username", "roles", "email_verified"},
+	}
+
+	ctx, cancel := caddy.NewContext(caddy.Context{Context: context.Background()})
+	defer cancel()
+
+	err := au.Provision(ctx)
+	require.NoError(t, err)
+
+	const state = "test-state"
+
+	csrfCookieValue, err := au.secure.Encode(au.Name+"|"+state, &CSRFToken{
+		PKCEVerifier: "test-pkce-verifier",
+		RedirectURI:  "/original",
+	})
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
+	csrfCookie := au.NewCookie(csrfCookieValue)
+	csrfCookie.Name = au.Name + "|" + state
+	r.AddCookie(csrfCookie)
+
+	cfg := &testHandleCallbackConfiguration{
+		TestOIDCConfiguration: pkgtest.TestOIDCConfiguration{
+			UsernameClaim: "preferred_username",
+		},
+		userInfo: newTestUserInfo(t, `{
+			"preferred_username": "admin",
+			"roles": ["admin", "user"],
+			"email_verified": true
+		}`),
+		expires: time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	w := httptest.NewRecorder()
+
+	err = au.HandleCallback(cfg, w, r)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "/original", w.Header().Get("Location"))
+
+	var sessionCookie *http.Cookie
+
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == au.Name {
+			sessionCookie = cookie
+
+			break
+		}
+	}
+
+	require.NotNil(t, sessionCookie)
+
+	var s session.Session
+
+	err = au.secure.Decode(au.Name, sessionCookie.Value, &s)
+	require.NoError(t, err)
+
+	assert.Equal(t, "admin", s.UID)
+	assert.Equal(t, cfg.expires.Unix(), s.ExpiresAt)
+	assert.JSONEq(t, `{
+		"preferred_username": "admin",
+		"roles": ["admin", "user"],
+		"email_verified": true
+	}`, string(s.Claims))
 }

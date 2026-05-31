@@ -2,6 +2,7 @@ package caddy_oidc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,9 @@ import (
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp/headers"
 	"github.com/relvacode/caddy-oidc/authenticator"
 	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/stretchr/testify/assert"
@@ -257,4 +260,82 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars(t *testing.T) {
 	assert.Equal(t, "TestRule", repl.ReplaceAll("{http.auth.rule}", ""))
 	assert.Equal(t, "allow", repl.ReplaceAll("{http.auth.result}", ""))
 	assert.Equal(t, "bearer", repl.ReplaceAll("{http.auth.method}", ""))
+}
+
+func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars_Header(t *testing.T) {
+	t.Parallel()
+
+	auth := &OIDCMiddleware{
+		Provider: GenerateTestProvider(),
+		Policies: Ruleset{
+			{
+				ID:     "TestRule",
+				Action: ActionAllow,
+				Matchers: caddyhttp.MatcherSet{
+					&MatchUser{Usernames: []string{"*"}},
+				},
+			},
+		},
+	}
+
+	adapter := caddyconfig.GetAdapter("caddyfile")
+	require.NotNil(t, adapter)
+
+	config, _, err := adapter.Adapt([]byte(`:0 {
+		header X-Placeholder {http.auth.user.claim.email} {
+			defer
+		}
+	}`), nil)
+	require.NoError(t, err)
+
+	var adapted struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Routes []struct {
+						Handle []json.RawMessage `json:"handle"`
+					} `json:"routes"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+
+	err = json.Unmarshal(config, &adapted)
+	require.NoError(t, err)
+
+	var headerHandler headers.Handler
+
+	for _, server := range adapted.Apps.HTTP.Servers {
+		for _, route := range server.Routes {
+			for _, rawHandler := range route.Handle {
+				var handler struct {
+					Handler string `json:"handler"`
+				}
+
+				err = json.Unmarshal(rawHandler, &handler)
+				require.NoError(t, err)
+
+				if handler.Handler == "headers" {
+					err = json.Unmarshal(rawHandler, &headerHandler)
+					require.NoError(t, err)
+				}
+			}
+		}
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.Provider.Clock().Add(time.Hour)))
+
+	caddyhttp.NewTestReplacer(r)
+
+	h := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+		return headerHandler.ServeHTTP(w, r, new(TestHandler))
+	})
+
+	err = auth.ServeHTTP(w, r, h)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "x@example.org", w.Header().Get("X-Placeholder"))
 }
