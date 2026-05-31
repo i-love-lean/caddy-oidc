@@ -433,7 +433,7 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 	claimValues := gjson.GetManyBytes(*jsonClaims, au.Claims...)
 	for i, claimValue := range claimValues {
 		if claimValue.Exists() {
-			s.Claims, err = sjson.SetBytes(s.Claims, au.Claims[i], claimValue.Raw)
+			s.Claims, err = sjson.SetRawBytes(s.Claims, au.Claims[i], []byte(claimValue.Raw))
 			if err != nil {
 				return fmt.Errorf("failed to set claim %s: %w", au.Claims[i], err)
 			}
