@@ -221,9 +221,9 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 
 				log.Debug("OIDC provider discovery successful", zap.Any("discovery", provider.Endpoint()))
 
-				oauthClient := &oauth2ConfigWithHTTPClient{
+				oauthClient := &oauth2ClientTemplate{
 					httpClient: httpClient,
-					Config: &oauth2.Config{
+					template: &oauth2.Config{
 						ClientID:     m.ClientID,
 						ClientSecret: m.ClientSecret,
 						Endpoint:     provider.Endpoint(),
