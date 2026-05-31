@@ -24,6 +24,8 @@ func (f HTTPTransportFunc) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestOauth2ClientTemplate_Exchange_ReplacerVars(t *testing.T) {
+	t.Parallel()
+
 	var errTransportSentinel = errors.New("transport sentinel")
 
 	c := &oauth2ClientTemplate{
@@ -53,14 +55,16 @@ func TestOauth2ClientTemplate_Exchange_ReplacerVars(t *testing.T) {
 	ctx := context.WithValue(t.Context(), caddy.ReplacerCtxKey, repl)
 
 	_, err := c.Exchange(ctx, "test-code")
-	assert.ErrorIs(t, err, errTransportSentinel)
+	require.ErrorIs(t, err, errTransportSentinel)
 
 	// Test that the template is not modified by running the test again
 	_, err = c.Exchange(ctx, "test-code")
-	assert.ErrorIs(t, err, errTransportSentinel)
+	require.ErrorIs(t, err, errTransportSentinel)
 }
 
 func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
+	t.Parallel()
+
 	var errTransportSentinel = errors.New("transport sentinel")
 
 	c := &oauth2ClientTemplate{
@@ -69,7 +73,7 @@ func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
 				err := req.ParseForm()
 				require.NoError(t, err)
 
-				assert.Equal(t, req.FormValue("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"), "REPLACED")
+				assert.Equal(t, "REPLACED", req.FormValue("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"))
 
 				return nil, errTransportSentinel
 			}),

@@ -43,6 +43,7 @@ func (c *oauth2ClientTemplate) Exchange(ctx context.Context, code string, opts .
 	*cfg = *c.template
 
 	var err error
+
 	cfg.ClientSecret, err = repl.ReplaceOrErr(c.template.ClientSecret, false, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to replace client secret: %w", err)
