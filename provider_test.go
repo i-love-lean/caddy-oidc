@@ -12,9 +12,91 @@ import (
 	"github.com/relvacode/caddy-oidc/authenticator"
 	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
+
+type HTTPTransportFunc func(req *http.Request) (*http.Response, error)
+
+func (f HTTPTransportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestOauth2ClientTemplate_Exchange_ReplacerVars(t *testing.T) {
+	t.Parallel()
+
+	var errTransportSentinel = errors.New("transport sentinel")
+
+	c := &oauth2ClientTemplate{
+		httpClient: &http.Client{
+			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
+				username, password, ok := req.BasicAuth()
+				assert.True(t, ok)
+				assert.Equal(t, "xyz", username)
+				assert.Equal(t, "REPLACED", password)
+
+				return nil, errTransportSentinel
+			}),
+		},
+		template: &oauth2.Config{
+			ClientID:     "xyz",
+			ClientSecret: "{test_var}",
+			Endpoint: oauth2.Endpoint{
+				AuthStyle: oauth2.AuthStyleInHeader,
+			},
+		},
+		tokenParams: map[string]string{},
+	}
+
+	repl := caddy.NewEmptyReplacer()
+	repl.Set("test_var", "REPLACED")
+
+	ctx := context.WithValue(t.Context(), caddy.ReplacerCtxKey, repl)
+
+	_, err := c.Exchange(ctx, "test-code")
+	require.ErrorIs(t, err, errTransportSentinel)
+
+	// Test that the template is not modified by running the test again
+	_, err = c.Exchange(ctx, "test-code")
+	require.ErrorIs(t, err, errTransportSentinel)
+}
+
+func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
+	t.Parallel()
+
+	var errTransportSentinel = errors.New("transport sentinel")
+
+	c := &oauth2ClientTemplate{
+		httpClient: &http.Client{
+			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
+				err := req.ParseForm()
+				require.NoError(t, err)
+
+				assert.Equal(t, "REPLACED", req.FormValue("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"))
+
+				return nil, errTransportSentinel
+			}),
+		},
+		template: &oauth2.Config{
+			ClientID: "xyz",
+			Endpoint: oauth2.Endpoint{
+				AuthStyle: oauth2.AuthStyleInParams,
+			},
+		},
+		tokenParams: map[string]string{
+			"urn:ietf:params:oauth:client-assertion-type:jwt-bearer": "{client_assertion}",
+		},
+	}
+
+	repl := caddy.NewEmptyReplacer()
+	repl.Set("client_assertion", "REPLACED")
+
+	ctx := context.WithValue(t.Context(), caddy.ReplacerCtxKey, repl)
+
+	_, err := c.Exchange(ctx, "test-code")
+	assert.ErrorIs(t, err, errTransportSentinel)
+}
 
 type testOAuthClientImpl struct{}
 

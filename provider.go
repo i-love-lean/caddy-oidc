@@ -25,20 +25,31 @@ type oauth2Client interface {
 	ClientID() string
 }
 
-// oauth2ConfigWithHTTPClient wraps an oauth2.Config to inject an HTTP client instance for token exchange.
-type oauth2ConfigWithHTTPClient struct {
-	*oauth2.Config
-
+// oauth2ClientTemplate wraps an oauth2.Config to inject an HTTP client instance for token exchange
+// and provide request-time Caddy replacer replacement.
+type oauth2ClientTemplate struct {
 	httpClient  *http.Client
+	template    *oauth2.Config
 	tokenParams map[string]string
 }
 
-func (c *oauth2ConfigWithHTTPClient) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+func (c *oauth2ClientTemplate) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	//nolint:forcetypeassert // Caddy will always provide a replacer in the context. A missing replacer will result in a panic.
+	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
 
+	cfg := new(oauth2.Config)
+	*cfg = *c.template
+
+	var err error
+
+	cfg.ClientSecret, err = repl.ReplaceOrErr(c.template.ClientSecret, false, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to replace client secret: %w", err)
+	}
+
 	if len(c.tokenParams) > 0 {
-		//nolint:forcetypeassert // Caddy will always provide a replacer in the context. A missing replacer will result in a panic.
-		repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 		for urlParam, v := range c.tokenParams {
 			pv, err := repl.ReplaceOrErr(v, false, true)
 			if err != nil {
@@ -49,15 +60,19 @@ func (c *oauth2ConfigWithHTTPClient) Exchange(ctx context.Context, code string, 
 		}
 	}
 
-	return c.Config.Exchange(ctx, code, opts...)
+	return cfg.Exchange(ctx, code, opts...)
 }
 
-func (c *oauth2ConfigWithHTTPClient) Scopes() []string {
-	return c.Config.Scopes
+func (c *oauth2ClientTemplate) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
+	return c.template.AuthCodeURL(state, opts...)
 }
 
-func (c *oauth2ConfigWithHTTPClient) ClientID() string {
-	return c.Config.ClientID
+func (c *oauth2ClientTemplate) Scopes() []string {
+	return c.template.Scopes
+}
+
+func (c *oauth2ClientTemplate) ClientID() string {
+	return c.template.ClientID
 }
 
 type userInfoClient interface {
