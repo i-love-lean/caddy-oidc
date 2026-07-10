@@ -44,18 +44,6 @@ The global directive is used to configure the OIDC provider. An example minimum 
 }
 ```
 
-For confidential OIDC clients that require a client secret, use the `client_secret` directive:
-
-```caddyfile
-{
-    oidc example {
-        issuer https://accounts.google.com
-        client_id "<client_id>"
-        client_secret "{env.OIDC_CLIENT_SECRET}"
-    }
-}
-```
-
 Each route then uses the `oidc` directive to configure the route using the named provider
 
 ```caddyfile
@@ -82,6 +70,35 @@ example.com {
 | `protected_resource_metadata` | (optional) Configure or disable RFC9728 support.                                                                                                      |          |
 | `authenticate`                | (optional) Configure [authentication methods](#authentication)                                                                                        |          |
 | `token_params`                | (optional) Additional key-value parameters for the OAuth code exchange. Values support Caddy placeholders. See [Token Parameters](#token-parameters). |          |
+
+### Default Provider
+
+A global directive without a name is used to configure the default provider.
+
+The default provider is used when no provider name is specified in the handler-specific `oidc` directive and serves
+as a baseline inherited configuration for named providers defined after the default provider.
+
+When a named provider is configured, whatever the current default provider configuration is cloned and used as the
+baseline for the named provider. This means any defaults **must** be configured before a named provider is configured.
+
+```caddyfile
+{
+    # An `oidc` directive without a name is used to configure the default provider.
+    oidc {
+        issuer https://accounts.google.com
+        client_id {env.OAUTH_CLIENT_ID}
+    }
+
+    # Implicitly inherits the default configuration.
+    oidc default_with_scopes {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id {env.OAUTH_CLIENT_ID}
+
+        scope openid email profile
+    }
+}
+```
 
 ### Authentication
 
@@ -194,7 +211,8 @@ filesystem on every token exchange, so token rotation is handled automatically.
 
 > [!NOTE]
 > While the underlying mechanism (RFC 7523 JWT bearer client assertions) is a standard, this pattern has been tested
-> with Microsoft Entra ID federated credentials. The same `token_params` approach can be adapted for other providers that
+> with Microsoft Entra ID federated credentials. The same `token_params` approach can be adapted for other providers
+> that
 > accept custom parameters during the token exchange.
 
 #### Bearer
