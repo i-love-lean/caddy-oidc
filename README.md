@@ -319,12 +319,16 @@ The handler directive is placed on routes to provide authentication and authoriz
 Requests are authenticated according to the configured OIDC provider and then authorized according to access policy
 rules configured in the directive.
 
+A route is only authenticated by `caddy-oidc` if it is configured with at least once `oidc` handler directive.
+
 The handler directive **must** contain at least one `allow` rule.
 
 ```caddyfile
 # Allow any valid authenticated user
 
 example.com {
+    # Use the "example" provider configuration.
+    # A name can be omitted to use the default provider.
     oidc example {
         allow {
             user *
@@ -386,12 +390,12 @@ oidc example {
 }
 ```
 
-## HTTP Matchers
+### HTTP Matchers
 
 In addition to the standard Caddy request matchers, the following matchers are provided.
 These matchers are only compatible with HTTP requests handled by the handler directive.
 
-### User
+#### User
 
 Matches the username of the authenticated user. A user match will never match an anonymous user.
 
@@ -421,7 +425,7 @@ allow {
 }
 ```
 
-### Anonymous
+#### Anonymous
 
 Matches request sessions that are anonymous.
 Anonymous sessions are sessions that have not been authenticated by the OIDC provider.
@@ -435,7 +439,7 @@ allow {
 }
 ```
 
-### Claim
+#### Claim
 
 Matches claims in the request session.
 
@@ -532,7 +536,7 @@ deny {
 }
 ```
 
-# Placeholder Variables
+### Placeholder Variables
 
 When a request passes through the `oidc` handler, the
 following [placeholder](https://caddyserver.com/docs/conventions#placeholders) variables are available:
@@ -555,7 +559,7 @@ header X-User-Claim-Email {http.auth.user.claim.email} {
 }
 ```
 
-## Claim Value Formatting
+#### Claim Value Formatting
 
 - Simple values like strings, booleans, and numbers are formatted as plain values
 - Null values are empty
