@@ -23,4 +23,4 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version_file: .tool-versions
+          version-file: .tool-versions
