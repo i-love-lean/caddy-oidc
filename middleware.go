@@ -59,7 +59,7 @@ func (mw *OIDCMiddleware) CaddyModule() caddy.ModuleInfo {
 
 // UnmarshalCaddyfile sets up the OIDCMiddleware from Caddyfile tokens.
 /*
-	oidc example {
+	oidc [example] {
 		allow|deny {
 			...
 		}
@@ -67,11 +67,9 @@ func (mw *OIDCMiddleware) CaddyModule() caddy.ModuleInfo {
 */
 func (mw *OIDCMiddleware) UnmarshalCaddyfile(dis *caddyfile.Dispenser) error {
 	for dis.Next() {
-		if !dis.NextArg() {
-			return dis.ArgErr()
+		if dis.NextArg() {
+			mw.ProviderName = dis.Val()
 		}
-
-		mw.ProviderName = dis.Val()
 
 		err := mw.Policies.UnmarshalCaddyfile(dis)
 		if err != nil {
