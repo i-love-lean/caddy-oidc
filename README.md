@@ -89,7 +89,8 @@ baseline for the named provider. This means any defaults **must** be configured 
         client_id {env.OAUTH_CLIENT_ID}
     }
 
-    # Implicitly inherits the default configuration.
+    # An `oidc` directive with a name is used to configure a named provider
+    # it implicitly inherits the default provider configuration.
     oidc default_with_scopes {
         # Inherits:
         # issuer https://accounts.google.com
