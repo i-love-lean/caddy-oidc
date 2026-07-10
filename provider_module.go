@@ -14,6 +14,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/relvacode/caddy-oidc/authenticator"
+	"github.com/relvacode/caddy-oidc/internal/deferred"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 	"golang.org/x/oauth2"
@@ -211,7 +212,7 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 			ProtectedResource: m.ProtectedResourceMetadata,
 			Issuer:            m.Issuer,
 			UsernameClaim:     m.Username,
-			Discovery: Defer[*providerDiscoveryConfiguration](func() (*providerDiscoveryConfiguration, error) {
+			Discovery: deferred.Defer[*providerDiscoveryConfiguration](func() (*providerDiscoveryConfiguration, error) {
 				providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
 				provider, err := oidc.NewProvider(providerCtx, m.Issuer)

@@ -1,4 +1,4 @@
-package caddy_oidc
+package deferred
 
 import (
 	"context"

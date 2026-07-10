@@ -10,6 +10,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/relvacode/caddy-oidc/authenticator"
+	"github.com/relvacode/caddy-oidc/internal/deferred"
 	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -155,7 +156,7 @@ func GenerateTestProvider() *Provider {
 		Issuer:            "https://openid/example",
 	}
 
-	provider.Discovery = Defer[*providerDiscoveryConfiguration](func() (*providerDiscoveryConfiguration, error) {
+	provider.Discovery = deferred.Defer(func() (*providerDiscoveryConfiguration, error) {
 		return &providerDiscoveryConfiguration{
 			Verifier: pkgtest.NewTestVerifier(provider.Clock),
 			OAuth2:   testOAuthClientImpl{},

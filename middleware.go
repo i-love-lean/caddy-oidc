@@ -3,7 +3,6 @@ package caddy_oidc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -44,7 +43,9 @@ var _ caddyhttp.MiddlewareHandler = (*OIDCMiddleware)(nil)
 // OIDCMiddleware is a middleware that authenticates and authorizes requests based on configured rules.
 // It's associated with a separately configured OIDC provider by name.
 type OIDCMiddleware struct {
-	ProviderName string    `json:"provider"`
+	// The provider to use.
+	// If left empty, the default provider configuration is used.
+	ProviderName string    `json:"provider,omitempty"`
 	Policies     Ruleset   `json:"policies"`
 	Provider     *Provider `json:"-"`
 }
@@ -92,12 +93,10 @@ func (mw *OIDCMiddleware) Provision(ctx caddy.Context) error {
 
 	app := val.(*App) //nolint:forcetypeassert
 
-	pr, ok := app.provided[mw.ProviderName]
-	if !ok {
-		return fmt.Errorf("oidc provider '%s' not configured", mw.ProviderName)
+	mw.Provider, err = app.ProvisionProvider(ctx, mw.ProviderName)
+	if err != nil {
+		return err
 	}
-
-	mw.Provider = pr
 
 	err = mw.Policies.Provision(ctx)
 	if err != nil {
