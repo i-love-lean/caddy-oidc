@@ -1,3 +1,4 @@
+// Package lazy provides one-shot lazy initialization of a value.
 package lazy
 
 import "sync"

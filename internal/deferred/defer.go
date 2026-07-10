@@ -1,19 +1,21 @@
+// Package deferred provides a simple way to defer a function call in a separate goroutine
+// and allow multiple callers to wait for the result.
 package deferred
 
 import (
 	"context"
 )
 
-// DeferredResult represents a computation that runs in the background.
-type DeferredResult[T any] struct {
+// Result represents a computation that runs in the background.
+type Result[T any] struct {
 	done  chan struct{}
 	value T
 	err   error
 }
 
 // Defer starts the provided function in a separate goroutine and returns a handle to the result.
-func Defer[T any](deferFunc func() (T, error)) *DeferredResult[T] {
-	var deferred = &DeferredResult[T]{
+func Defer[T any](deferFunc func() (T, error)) *Result[T] {
+	var deferred = &Result[T]{
 		done: make(chan struct{}),
 	}
 
@@ -26,7 +28,7 @@ func Defer[T any](deferFunc func() (T, error)) *DeferredResult[T] {
 }
 
 // Get blocks until the background process is finished or the context is canceled.
-func (d *DeferredResult[T]) Get(ctx context.Context) (T, error) {
+func (d *Result[T]) Get(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():
 		var zero T

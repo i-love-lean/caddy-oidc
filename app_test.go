@@ -11,6 +11,8 @@ import (
 )
 
 func TestParseGlobalConfig_DefaultProvider(t *testing.T) {
+	t.Parallel()
+
 	_, app := parseGlobalOIDCConfig(t, nil, `oidc {
 		issuer http://openid/default
 		client_id default-client
@@ -24,6 +26,8 @@ func TestParseGlobalConfig_DefaultProvider(t *testing.T) {
 }
 
 func TestParseGlobalConfig_NamedProviderInheritsCurrentDefault(t *testing.T) {
+	t.Parallel()
+
 	parsed, _ := parseGlobalOIDCConfig(t, nil, `oidc {
 		issuer http://openid/default
 		client_id default-client
@@ -48,6 +52,8 @@ func TestParseGlobalConfig_NamedProviderInheritsCurrentDefault(t *testing.T) {
 }
 
 func TestParseGlobalConfig_DefaultChangesAfterNamedProviderDoNotMutateNamedProvider(t *testing.T) {
+	t.Parallel()
+
 	parsed, _ := parseGlobalOIDCConfig(t, nil, `oidc {
 		issuer http://openid/default
 		client_id default-client
@@ -88,6 +94,7 @@ func parseGlobalOIDCConfig(t *testing.T, prev any, input string) (httpcaddyfile.
 	require.Equal(t, moduleID, globalApp.Name)
 
 	var app App
+
 	err = json.Unmarshal(globalApp.Value, &app)
 	require.NoError(t, err)
 

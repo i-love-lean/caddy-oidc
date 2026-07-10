@@ -99,7 +99,7 @@ type Provider struct {
 	UsernameClaim     string
 	ProtectedResource *ProtectedResourceMetadataConfiguration
 	Authenticators    authenticator.Set
-	Discovery         *deferred.DeferredResult[*providerDiscoveryConfiguration]
+	Discovery         *deferred.Result[*providerDiscoveryConfiguration]
 }
 
 func (pr *Provider) Now() time.Time           { return pr.Clock() }
