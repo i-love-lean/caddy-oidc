@@ -5,15 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/huandu/go-clone/generic"
-	"github.com/relvacode/caddy-oidc/internal/lazy"
-
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	_ "github.com/relvacode/caddy-oidc/authenticator" // Registers the built-in authenticator modules
+	"github.com/relvacode/caddy-oidc/internal/baseline"
 )
 
 const moduleID = "oidc"
@@ -39,11 +37,10 @@ func parseGlobalConfig(d *caddyfile.Dispenser, prev any) (any, error) {
 	}
 
 	for d.Next() {
+		// Default target is the global default
 		var mod = &app.Default
 
-		// If there is a next argument in the dispener
-		// then we'll treat that as a named provider
-		// which clones from the current default configuration.
+		// If there is an argument, then define a named provider
 		if d.NextArg() {
 			var name = d.Val()
 
@@ -51,8 +48,13 @@ func parseGlobalConfig(d *caddyfile.Dispenser, prev any) (any, error) {
 				app.Providers = make(map[string]*OIDCProviderModule)
 			}
 
-			mod = clone.Clone(&app.Default)
-			app.Providers[name] = mod
+			var ok bool
+
+			mod, ok = app.Providers[name]
+			if !ok {
+				mod = new(OIDCProviderModule)
+				app.Providers[name] = mod
+			}
 		}
 
 		err := mod.UnmarshalCaddyfile(d)
@@ -92,8 +94,6 @@ type App struct {
 	// and can be referenced directly in an OIDCMiddleware when a provider is not defined.
 	Default   OIDCProviderModule             `json:"default"`
 	Providers map[string]*OIDCProviderModule `json:"providers,omitempty"`
-
-	provisioned map[string]*lazy.Lazy[*Provider]
 }
 
 func (*App) CaddyModule() caddy.ModuleInfo {
@@ -106,7 +106,15 @@ func (*App) CaddyModule() caddy.ModuleInfo {
 func (*App) Start() error { return nil }
 func (*App) Stop() error  { return nil }
 
-func (a *App) getProviderModule(name string) (*OIDCProviderModule, error) {
+// GetInheritedProvider returns the OIDCProviderModule for the given name.
+// If the name is empty, then the default provider is returned.
+// If the named provider is not configured, then an error is returned.
+//
+// If a named provider is configured, then the baseline configuration is applied to the provider
+// from the application global default provider configuration.
+//
+// The caller must not modify the returned provider.
+func (a *App) GetInheritedProvider(name string) (*OIDCProviderModule, error) {
 	if name == "" {
 		return &a.Default, nil
 	}
@@ -116,58 +124,12 @@ func (a *App) getProviderModule(name string) (*OIDCProviderModule, error) {
 		return nil, fmt.Errorf("oidc: named provider '%s' is not configured", name)
 	}
 
-	return mod, nil
-}
+	// Create a copy of the reference module
+	// Then apply the global default as a baseline
+	copied := new(OIDCProviderModule)
+	*copied = *mod
 
-// displayName returns the display name for the given provider name.
-// As we use an empty string to reference the default provider,
-// it makes sense to use a placeholder value instead for the default
-// so that it's obvious in errors and logs that the referencee is using the default configuration.
-func displayName(name string) string {
-	if name == "" {
-		return "<default>"
-	}
+	baseline.Apply(copied, &a.Default)
 
-	return name
-}
-
-func (a *App) ProvisionProvider(ctx caddy.Context, name string) (*Provider, error) {
-	if a.provisioned == nil {
-		a.provisioned = make(map[string]*lazy.Lazy[*Provider])
-	}
-
-	init, ok := a.provisioned[name]
-
-	// Named provisioned provider has not been set up yet
-	if !ok {
-		mod, err := a.getProviderModule(name)
-		if err != nil {
-			return nil, err
-		}
-
-		// Lazily provision the provider exactly once.
-		// Only the first instance of provisioning gets the contents of the caddy.Context.
-		init = lazy.New(func() (*Provider, error) {
-			err := mod.Provision(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("provision: %w", err)
-			}
-
-			err = mod.Validate()
-			if err != nil {
-				return nil, fmt.Errorf("validate: %w", err)
-			}
-
-			return mod.Create(ctx)
-		})
-
-		a.provisioned[name] = init
-	}
-
-	pr, err := init.Get()
-	if err != nil {
-		return nil, fmt.Errorf("oidc: provider '%s': %w", displayName(name), err)
-	}
-
-	return pr, nil
+	return copied, nil
 }

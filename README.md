@@ -33,22 +33,55 @@ RUN xcaddy build \
 
 `caddy-oidc` has a global and per-route `oidc` directive.
 
-The global directive is used to configure the OIDC provider. An example minimum configuration is shown below.
+The [global directive](#global-directive) is used to describe common OIDC provider configurations that can be used by multiple routes.
 
 ```caddyfile
 {
-    oidc example {
+    oidc {
         issuer https://accounts.google.com
         client_id "<client_id>"
     }
 }
 ```
 
-Each route then uses the `oidc` directive to configure the route using the named provider
+A global directive can be given a name, which can be used to reference it in the [handler directive](#handler-directive).
+A named global directive inherits the global default (unnamed) provider configuration.
+
+```caddyfile
+{
+    # Inherits the global "default" provider configuration.
+    # Any properties set here will override the global default provider.
+    oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id "<client_id>"
+        
+        # Replaces `scope`
+        scope openid email profile
+    }
+}
+```
+
+Each route that needs to be authenticated then uses the [handler directive](#handler-directive). 
+The handler directive inherits provider configuration from the matching global `oidc` directive, but can be overridden
+and/or entirely defined inline.
 
 ```caddyfile
 example.com {
+    # Inherit the global "example" provider configuration.
+    # A provider name can be omitted to use the global default.
     oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id "<client_id>"
+        # scope openid email profile
+        
+        # Replaces any inherited `authenticate` configuration.
+        authenticate bearer
+        
+        # ...
+        # Handler-specific directives
+        
         allow {
             user *
         }
@@ -317,27 +350,12 @@ protected_resource_metadata {
 ## Handler Directive
 
 The handler directive is placed on routes to provide authentication and authorization for that route.
-Requests are authenticated according to the configured OIDC provider and then authorized according to access policy
-rules configured in the directive.
+These directives inherit configuration from the global `oidc` directive. If a specific provider is named, 
+then it uses that, otherwise it inherits the global defaults.
 
 A route is only authenticated by `caddy-oidc` if it is configured with at least once `oidc` handler directive.
 
 The handler directive **must** contain at least one `allow` rule.
-
-```caddyfile
-# Allow any valid authenticated user
-
-example.com {
-    # Use the "example" provider configuration.
-    # A name can be omitted to use the default provider.
-    oidc example {
-        allow {
-            user *
-        }
-    }
-    reverse_proxy localhost:8080
-}
-```
 
 If the request is unauthenticated, and there is not an explicit `allow` or `deny` rule that matches the request,
 and the request is made by a browser, then the browser will be automatically redirected to the OIDC provider for

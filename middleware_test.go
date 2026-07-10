@@ -36,7 +36,7 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_AuthorizationFlowSupported(t *test
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
 	w := httptest.NewRecorder()
@@ -73,10 +73,10 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_BearerOnly(t *testing.T) {
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
-	auth.Provider.Authenticators.Authenticators = []authenticator.RequestAuthenticator{
+	auth.provider.Authenticators.Authenticators = []authenticator.RequestAuthenticator{
 		&authenticator.BearerAuthenticator{},
 	}
 
@@ -101,7 +101,7 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_NoRedirectSupport(t *testing.T) {
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
 	w := httptest.NewRecorder()
@@ -125,7 +125,7 @@ func TestOIDCMiddleware_ServeHTTP_BearerOK(t *testing.T) {
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 		Policies: Ruleset{
 			{
 				Action: ActionAllow,
@@ -139,7 +139,7 @@ func TestOIDCMiddleware_ServeHTTP_BearerOK(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r = r.WithContext(context.WithValue(r.Context(), caddy.ReplacerCtxKey, caddy.NewReplacer()))
-	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.Provider.Clock().Add(time.Hour)))
+	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	h := new(TestHandler)
 
@@ -153,12 +153,12 @@ func TestOIDCMiddleware_ServeHTTP_WithBearerAuthentication_EmptyRuleset(t *testi
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.Provider.Clock().Add(time.Hour)))
+	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	h := new(TestHandler)
 
@@ -170,10 +170,10 @@ func TestOIDCMiddleware_ServeHTTP_WellKnownOAuthProtectedResource(t *testing.T) 
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
-	auth.Provider.ProtectedResource.Audience = true
+	auth.provider.ProtectedResource.Audience = true
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
@@ -207,10 +207,10 @@ func TestOIDCMiddleware_ServeHTTP_WellKnownOAuthProtectedResource_Disabled(t *te
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 	}
 
-	auth.Provider.ProtectedResource.Disable = true
+	auth.provider.ProtectedResource.Disable = true
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
@@ -229,7 +229,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars(t *testing.T) {
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 		Policies: Ruleset{
 			{
 				ID:     "TestRule",
@@ -243,7 +243,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.Provider.Clock().Add(time.Hour)))
+	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	repl := caddyhttp.NewTestReplacer(r)
 
@@ -266,7 +266,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars_Header(t *testing.T) {
 	t.Parallel()
 
 	auth := &OIDCMiddleware{
-		Provider: GenerateTestProvider(),
+		provider: GenerateTestProvider(),
 		Policies: Ruleset{
 			{
 				ID:     "TestRule",
@@ -325,7 +325,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars_Header(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.Provider.Clock().Add(time.Hour)))
+	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	caddyhttp.NewTestReplacer(r)
 

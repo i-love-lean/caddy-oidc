@@ -40,18 +40,20 @@ func TestParseGlobalConfig_NamedProviderInheritsCurrentDefault(t *testing.T) {
 	}`)
 
 	require.Contains(t, app.Providers, "named")
-	named := app.Providers["named"]
+
+	named, err := app.GetInheritedProvider("named")
+	require.NoError(t, err)
 
 	assert.Equal(t, "http://openid/default", named.Issuer)
 	assert.Equal(t, "named-client", named.ClientID)
-	assert.Equal(t, []string{"openid", "email", "profile"}, named.Scope)
+	assert.Equal(t, []string{"profile"}, named.Scope)
 
 	assert.Equal(t, "http://openid/default", app.Default.Issuer)
 	assert.Equal(t, "default-client", app.Default.ClientID)
 	assert.Equal(t, []string{"openid", "email"}, app.Default.Scope)
 }
 
-func TestParseGlobalConfig_DefaultChangesAfterNamedProviderDoNotMutateNamedProvider(t *testing.T) {
+func TestParseGlobalConfig_DefaultChangesAfterNamedProviderAreReflected(t *testing.T) {
 	t.Parallel()
 
 	parsed, _ := parseGlobalOIDCConfig(t, nil, `oidc {
@@ -71,15 +73,17 @@ func TestParseGlobalConfig_DefaultChangesAfterNamedProviderDoNotMutateNamedProvi
 	}`)
 
 	require.Contains(t, app.Providers, "named")
-	named := app.Providers["named"]
+
+	named, err := app.GetInheritedProvider("named")
+	require.NoError(t, err)
 
 	assert.Equal(t, "http://openid/updated-default", app.Default.Issuer)
 	assert.Equal(t, "default-client", app.Default.ClientID)
 	assert.Equal(t, []string{"openid", "email", "groups"}, app.Default.Scope)
 
-	assert.Equal(t, "http://openid/default", named.Issuer)
+	assert.Equal(t, "http://openid/updated-default", named.Issuer)
 	assert.Equal(t, "named-client", named.ClientID)
-	assert.Equal(t, []string{"openid", "email", "profile"}, named.Scope)
+	assert.Equal(t, []string{"profile"}, named.Scope)
 }
 
 func parseGlobalOIDCConfig(t *testing.T, prev any, input string) (httpcaddyfile.App, App) {

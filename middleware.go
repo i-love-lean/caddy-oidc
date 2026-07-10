@@ -11,6 +11,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/relvacode/caddy-oidc/authenticator"
+	"github.com/relvacode/caddy-oidc/internal/baseline"
 	"github.com/relvacode/caddy-oidc/request"
 	"github.com/relvacode/caddy-oidc/session"
 	"github.com/tidwall/gjson"
@@ -41,13 +42,17 @@ var _ caddyfile.Unmarshaler = (*OIDCMiddleware)(nil)
 var _ caddyhttp.MiddlewareHandler = (*OIDCMiddleware)(nil)
 
 // OIDCMiddleware is a middleware that authenticates and authorizes requests based on configured rules.
-// It's associated with a separately configured OIDC provider by name.
+// It contains its own OIDC provider configuration.
+// During provisioning, it applies the inherited baseline configuration to the local configuration.
 type OIDCMiddleware struct {
-	// The provider to use.
-	// If left empty, the default provider configuration is used.
-	ProviderName string    `json:"provider,omitempty"`
-	Policies     Ruleset   `json:"policies"`
-	Provider     *Provider `json:"-"`
+	OIDCProviderModule
+
+	// Inherits is the name of a globally configured OIDC provider to inherit settings from.
+	// The inherited configuration will be merged with the local configuration.
+	Inherits string  `json:"inherits,omitempty"`
+	Policies Ruleset `json:"policies"`
+
+	provider *Provider
 }
 
 func (mw *OIDCMiddleware) CaddyModule() caddy.ModuleInfo {
@@ -60,20 +65,38 @@ func (mw *OIDCMiddleware) CaddyModule() caddy.ModuleInfo {
 // UnmarshalCaddyfile sets up the OIDCMiddleware from Caddyfile tokens.
 /*
 	oidc [example] {
+
 		allow|deny {
 			...
 		}
     }
 */
-func (mw *OIDCMiddleware) UnmarshalCaddyfile(dis *caddyfile.Dispenser) error {
-	for dis.Next() {
-		if dis.NextArg() {
-			mw.ProviderName = dis.Val()
+func (mw *OIDCMiddleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		if d.NextArg() {
+			mw.Inherits = d.Val()
 		}
 
-		err := mw.Policies.UnmarshalCaddyfile(dis)
-		if err != nil {
-			return err
+		for nesting := d.Nesting(); d.NextBlock(nesting); {
+			ok, err := mw.OIDCProviderModule.UnmarshalCaddyfileToken(d)
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				continue
+			}
+
+			ok, err = mw.Policies.UnmarshalCaddyfileToken(d)
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				continue
+			}
+
+			return d.SyntaxErr("unrecognized subdirective")
 		}
 	}
 
@@ -91,12 +114,21 @@ func (mw *OIDCMiddleware) Provision(ctx caddy.Context) error {
 
 	app := val.(*App) //nolint:forcetypeassert
 
-	mw.Provider, err = app.ProvisionProvider(ctx, mw.ProviderName)
+	// Get the inherited provider configuration.
+	base, err := app.GetInheritedProvider(mw.Inherits)
 	if err != nil {
 		return err
 	}
 
-	err = mw.Policies.Provision(ctx)
+	// Apply the inherited baseline to our provider configuration.
+	baseline.Apply(&mw.OIDCProviderModule, base)
+
+	err = mw.OIDCProviderModule.Provision(ctx)
+	if err != nil {
+		return err
+	}
+
+	mw.provider, err = mw.OIDCProviderModule.Create(ctx)
 	if err != nil {
 		return err
 	}
@@ -106,7 +138,14 @@ func (mw *OIDCMiddleware) Provision(ctx caddy.Context) error {
 
 // Validate validates the configuration of the OIDCMiddleware.
 func (mw *OIDCMiddleware) Validate() error {
-	return mw.Policies.Validate()
+	if mw.provider == nil {
+		return errors.New("provider not provisioned")
+	}
+
+	return errors.Join(
+		mw.OIDCProviderModule.Validate(),
+		mw.Policies.Validate(),
+	)
 }
 
 func (*OIDCMiddleware) setReplacerVars(repl *caddy.Replacer, session *session.Session, authMethod authenticator.AuthMethod) {
@@ -146,24 +185,24 @@ func (mw *OIDCMiddleware) interceptRequest(rw http.ResponseWriter, r *http.Reque
 	// Check if the request is an OAuth callback.
 	// Only supported if there is a session cookie authenticator configuration.
 	if r.Method == http.MethodGet {
-		cookie, ok := authenticator.GetAuthenticator[*authenticator.SessionCookieAuthenticator](&mw.Provider.Authenticators)
+		cookie, ok := authenticator.GetAuthenticator[*authenticator.SessionCookieAuthenticator](&mw.provider.Authenticators)
 		if ok && cookie.IsCallbackURL(r) {
-			return true, cookie.HandleCallback(mw.Provider, rw, r)
+			return true, cookie.HandleCallback(mw.provider, rw, r)
 		}
 	}
 
 	// Check for supported well-knowns
 	if r.Method == http.MethodGet && r.URL.Path == WellKnownOAuthProtectedResourcePath {
-		return true, mw.Provider.ServeHTTPOAuthProtectedResource(rw, r)
+		return true, mw.provider.ServeHTTPOAuthProtectedResource(rw, r)
 	}
 
-	authMethod, s, err := mw.Provider.Authenticators.AuthenticateRequest(mw.Provider, r)
+	authMethod, s, err := mw.provider.Authenticators.AuthenticateRequest(mw.provider, r)
 	if err != nil {
 		return false, err
 	}
 
 	// Strip the request if configured
-	mw.Provider.Authenticators.StripRequest(r)
+	mw.provider.Authenticators.StripRequest(r)
 
 	// Set replacer vars
 	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
@@ -197,13 +236,13 @@ func (mw *OIDCMiddleware) interceptRequest(rw http.ResponseWriter, r *http.Reque
 		//		Otherwise, return a 401 Unauthorized error.
 		if s.Anonymous {
 			if r.Method == http.MethodGet && request.IsBrowserInteractive(r) {
-				cookie, ok := authenticator.GetAuthenticator[*authenticator.SessionCookieAuthenticator](&mw.Provider.Authenticators)
+				cookie, ok := authenticator.GetAuthenticator[*authenticator.SessionCookieAuthenticator](&mw.provider.Authenticators)
 				if ok {
-					return true, cookie.StartLogin(mw.Provider, rw, r)
+					return true, cookie.StartLogin(mw.provider, rw, r)
 				}
 			}
 
-			if rs, ok := mw.Provider.ProtectedResourceMetadata(r); ok {
+			if rs, ok := mw.provider.ProtectedResourceMetadata(r); ok {
 				rw.Header().Set("WWW-Authenticate", rs.WWWAuthenticate())
 			}
 
