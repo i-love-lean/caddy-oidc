@@ -12,6 +12,7 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/relvacode/caddy-oidc/authenticator"
+	"github.com/relvacode/caddy-oidc/internal/deferred"
 	"github.com/relvacode/caddy-oidc/request"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -98,7 +99,7 @@ type Provider struct {
 	UsernameClaim     string
 	ProtectedResource *ProtectedResourceMetadataConfiguration
 	Authenticators    authenticator.Set
-	Discovery         *DeferredResult[*providerDiscoveryConfiguration]
+	Discovery         *deferred.Result[*providerDiscoveryConfiguration]
 }
 
 func (pr *Provider) Now() time.Time           { return pr.Clock() }
