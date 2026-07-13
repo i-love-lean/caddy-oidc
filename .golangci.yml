@@ -91,3 +91,4 @@ linters:
             - github.com/hashicorp/go-retryablehttp
             - github.com/munnerz/goautoneg
             - github.com/stretchr/testify
+            - github.com/huandu/go-clone

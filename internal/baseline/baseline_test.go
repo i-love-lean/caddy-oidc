@@ -42,4 +42,8 @@ func TestApply(t *testing.T) {
 	assert.Equal(t, "bar", target.Field1)
 	assert.Equal(t, 1, target.Field2)
 	assert.Equal(t, 3, target.Field3)
+
+	target.Field6["a"] = "z"
+
+	assert.Equal(t, "b", baseline.Field6["a"])
 }
