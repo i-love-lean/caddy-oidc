@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testPolicyProvisioned atomic.Bool
+
+type testPolicyMatcher struct{}
+
+func init() {
+	caddy.RegisterModule(new(testPolicyMatcher))
+}
+
+func (*testPolicyMatcher) CaddyModule() caddy.ModuleInfo {
+	return caddy.ModuleInfo{
+		ID:  "http.matchers.test_policy_provision",
+		New: func() caddy.Module { return new(testPolicyMatcher) },
+	}
+}
+
+func (*testPolicyMatcher) Provision(caddy.Context) error {
+	testPolicyProvisioned.Store(true)
+
+	return nil
+}
+
+func (*testPolicyMatcher) MatchWithError(*http.Request) (bool, error) {
+	return true, nil
+}
+
 type TestHandler struct {
 	calls int
 }
@@ -30,6 +56,59 @@ func (h *TestHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) error {
 	w.WriteHeader(http.StatusOK)
 
 	return nil
+}
+
+func TestOIDCMiddleware_Provision_ProvisionsPolicies(t *testing.T) {
+	t.Parallel()
+
+	testPolicyProvisioned.Store(false)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		issuer := "http://" + r.Host
+		_, _ = fmt.Fprintf(w, `{
+			"issuer": %q,
+			"authorization_endpoint": %q,
+			"token_endpoint": %q,
+			"jwks_uri": %q
+		}`, issuer, issuer+"/authorize", issuer+"/token", issuer+"/keys")
+	}))
+	t.Cleanup(server.Close)
+
+	configJSON := fmt.Appendf(nil, `{
+		"apps": {
+			"oidc": {
+				"default": {
+					"issuer": %q,
+					"client_id": "xyz",
+					"authenticators": {
+						"authenticators": [{"authenticator": "bearer"}]
+					}
+				}
+			},
+			"http": {
+				"servers": {
+					"test": {
+						"routes": [{
+							"handle": [{
+								"handler": "oidc",
+								"policies": [{
+									"action": "allow",
+									"match": {"test_policy_provision": {}}
+								}]
+							}]
+						}]
+					}
+				}
+			}
+		}
+	}`, server.URL)
+
+	var config caddy.Config
+
+	err := json.Unmarshal(configJSON, &config)
+	require.NoError(t, err)
+	require.NoError(t, caddy.Validate(&config))
+	assert.True(t, testPolicyProvisioned.Load())
 }
 
 func TestOIDCMiddleware_ServeHTTP_WithoutAuth_AuthorizationFlowSupported(t *testing.T) {
