@@ -133,6 +133,11 @@ func (mw *OIDCMiddleware) Provision(ctx caddy.Context) error {
 		return err
 	}
 
+	err = mw.Policies.Provision(ctx)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
