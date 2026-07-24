@@ -61,6 +61,24 @@ func TestSessionCookieAuthenticator_UnmarshalCaddyfile(t *testing.T) {
 			},
 		},
 		{
+			name: "max_age",
+			input: `{
+				name caddy
+				max_age 168h
+			}`,
+			expect: SessionCookieAuthenticator{
+				Name:   "caddy",
+				MaxAge: caddy.Duration(168 * time.Hour),
+			},
+		},
+		{
+			name: "invalid max_age",
+			input: `{
+				max_age not-a-duration
+			}`,
+			shouldErr: true,
+		},
+		{
 			name: "invalid same_site",
 			input: `{
 				same_site mysterious
@@ -394,4 +412,92 @@ func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *test
 		"roles": ["admin", "user"],
 		"email_verified": true
 	}`, string(s.Claims))
+	assert.Equal(t, 0, sessionCookie.MaxAge)
+}
+
+func TestSessionCookieAuthenticator_HandleCallback_MaxAge(t *testing.T) {
+	t.Parallel()
+
+	const maxAge = 2 * time.Hour
+
+	au := &SessionCookieAuthenticator{
+		Name:   "test-cookie",
+		Secret: "Y4lbVNr01M4NyBCUSNbrAL4cavA6kjdM",
+		MaxAge: caddy.Duration(maxAge),
+	}
+
+	ctx, cancel := caddy.NewContext(caddy.Context{Context: context.Background()})
+	defer cancel()
+
+	err := au.Provision(ctx)
+	require.NoError(t, err)
+
+	const state = "test-state"
+
+	csrfCookieValue, err := au.secure.Encode(au.Name+"|"+state, &CSRFToken{
+		PKCEVerifier: "test-pkce-verifier",
+		RedirectURI:  "/original",
+	})
+	require.NoError(t, err)
+
+	r := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
+	csrfCookie := au.NewCookie(csrfCookieValue)
+	csrfCookie.Name = au.Name + "|" + state
+	// NewCookie with MaxAge set also applies to CSRF cookie construction here;
+	// override so CSRF still works as a short-lived cookie in production code paths.
+	csrfCookie.MaxAge = 900
+	r.AddCookie(csrfCookie)
+
+	// TestOIDCConfiguration.Now() defaults to 2021-01-01 UTC.
+	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	cfg := &testHandleCallbackConfiguration{
+		TestOIDCConfiguration: pkgtest.TestOIDCConfiguration{
+			UsernameClaim: "sub",
+		},
+		userInfo: newTestUserInfo(t, `{"sub": "user-1"}`),
+		// Token expiry sooner than max_age — session should follow max_age.
+		expires: now.Add(15 * time.Minute),
+	}
+
+	w := httptest.NewRecorder()
+
+	err = au.HandleCallback(cfg, w, r)
+	require.NoError(t, err)
+
+	var sessionCookie *http.Cookie
+
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == au.Name {
+			sessionCookie = cookie
+
+			break
+		}
+	}
+
+	require.NotNil(t, sessionCookie)
+	assert.Equal(t, int(maxAge.Seconds()), sessionCookie.MaxAge)
+
+	var s session.Session
+
+	err = au.secure.Decode(au.Name, sessionCookie.Value, &s)
+	require.NoError(t, err)
+
+	assert.Equal(t, "user-1", s.UID)
+	assert.Equal(t, now.Add(maxAge).Unix(), s.ExpiresAt)
+}
+
+func TestSessionCookieAuthenticator_NewCookie_MaxAge(t *testing.T) {
+	t.Parallel()
+
+	au := &SessionCookieAuthenticator{
+		Name:   "caddy",
+		MaxAge: caddy.Duration(168 * time.Hour),
+	}
+
+	c := au.NewCookie("value")
+	assert.Equal(t, int((168 * time.Hour).Seconds()), c.MaxAge)
+
+	au.MaxAge = 0
+	c = au.NewCookie("value")
+	assert.Equal(t, 0, c.MaxAge)
 }

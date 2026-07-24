@@ -84,6 +84,11 @@ type SessionCookieAuthenticator struct {
 	Secret      string   `json:"secret,omitempty"`
 	Claims      []string `json:"claims,omitempty"`
 	RedirectURL string   `json:"redirect_url,omitempty"`
+	// MaxAge is the cookie and session lifetime. When unset or zero, the browser
+	// gets a session cookie and session expiry follows the OAuth token response.
+	// When set, the browser cookie uses Max-Age and session ExpiresAt is set to
+	// now+MaxAge (cookie sessions do not re-validate the access token).
+	MaxAge caddy.Duration `json:"max_age,omitempty"`
 
 	secure      *securecookie.SecureCookie
 	redirectURL *url.URL
@@ -146,6 +151,17 @@ func (au *SessionCookieAuthenticator) UnmarshalCaddyfile(d *caddyfile.Dispenser)
 			if !d.Args(&au.RedirectURL) {
 				return d.ArgErr()
 			}
+		case "max_age":
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+
+			dur, err := caddy.ParseDuration(d.Val())
+			if err != nil {
+				return d.Errf("invalid max_age: %v", err)
+			}
+
+			au.MaxAge = caddy.Duration(dur)
 		default:
 			return d.Errf("unrecognized cookie subdirective: %s", d.Val())
 		}
@@ -256,7 +272,7 @@ func (au *SessionCookieAuthenticator) AuthenticateRequest(cfg OIDCConfiguration,
 }
 
 func (au *SessionCookieAuthenticator) NewCookie(value string) *http.Cookie {
-	return &http.Cookie{
+	c := &http.Cookie{
 		Name:     au.Name,
 		Value:    value,
 		SameSite: au.SameSite.HTTPSameSite(),
@@ -265,6 +281,12 @@ func (au *SessionCookieAuthenticator) NewCookie(value string) *http.Cookie {
 		HttpOnly: true,
 		Secure:   !au.Insecure,
 	}
+
+	if au.MaxAge > 0 {
+		c.MaxAge = int(time.Duration(au.MaxAge).Seconds())
+	}
+
+	return c
 }
 
 // CSRFToken is the CSRF cookie payload when perform an OAuth2 Authorization Flow.
@@ -423,10 +445,17 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 		return fmt.Errorf("invalid response from user info endpoint: %w", session.MissingRequiredClaimError{Claim: cfg.GetUsernameClaim()})
 	}
 
+	expiresAt := idTokenExpires
+	if au.MaxAge > 0 {
+		// Cookie session is self-contained (UID + claims); it does not re-check
+		// the access token. Allow lifetime independent of token Expiry.
+		expiresAt = cfg.Now().Add(time.Duration(au.MaxAge))
+	}
+
 	s := &session.Session{
 		UID:       uidJSON.String(),
 		Claims:    json.RawMessage(`{}`),
-		ExpiresAt: idTokenExpires.Unix(),
+		ExpiresAt: expiresAt.Unix(),
 	}
 
 	// Copy claims
