@@ -110,6 +110,7 @@ func extractUsernameClaim(claims map[string]json.RawMessage, name string) (strin
 	}
 
 	var uid string
+
 	err := json.Unmarshal(uidJSON, &uid)
 	if err != nil {
 		return "", errors.Join(
@@ -137,8 +138,8 @@ type SessionCookieAuthenticator struct {
 	Domain   string   `json:"domain,omitempty"`
 	Path     string   `json:"path,omitempty"`
 	Secret   string   `json:"secret,omitempty"`
-	// IdClaims are the claims to extract from the ID token.
-	IdClaims []string `json:"id_claims,omitempty"`
+	// IDClaims are the claims to extract from the ID token.
+	IDClaims []string `json:"id_claims,omitempty"`
 	// Claims are the claims to extract from the user info endpoint response.
 	// User info claims take precedence over ID token claims.
 	Claims      []string `json:"claims,omitempty"`
@@ -204,7 +205,7 @@ func (au *SessionCookieAuthenticator) unmarshalCookieDirective(d *caddyfile.Disp
 	case "claim":
 		au.Claims = append(au.Claims, d.RemainingArgs()...)
 	case "id_claim":
-		au.IdClaims = append(au.IdClaims, d.RemainingArgs()...)
+		au.IDClaims = append(au.IDClaims, d.RemainingArgs()...)
 	case "secret":
 		if !d.Args(&au.Secret) {
 			return d.ArgErr()
@@ -484,7 +485,7 @@ func (au *SessionCookieAuthenticator) handleCodeExchange(
 	// Extract claims to store in the session cookie
 	var sessionClaims = make(map[string]json.RawMessage)
 
-	extractClaims(sessionClaims, idTokenClaims, au.IdClaims...)
+	extractClaims(sessionClaims, idTokenClaims, au.IDClaims...)
 
 	userInfo, err := cfg.UserInfo(r.Context(), oauth2.StaticTokenSource(response))
 	if err != nil {

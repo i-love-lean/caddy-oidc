@@ -62,7 +62,7 @@ func TestSessionCookieAuthenticator_UnmarshalCaddyfile(t *testing.T) {
 				Domain:   "example.com",
 				Path:     "/auth",
 				Claims:   []string{"email", "preferred_username"},
-				IdClaims: []string{"roles"},
+				IDClaims: []string{"roles"},
 			},
 		},
 		{
@@ -353,7 +353,7 @@ func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *test
 		Name:     "test-cookie",
 		Secret:   "Y4lbVNr01M4NyBCUSNbrAL4cavA6kjdM",
 		Claims:   []string{"preferred_username", "roles", "email_verified"},
-		IdClaims: []string{"iss"},
+		IDClaims: []string{"iss"},
 	}
 
 	ctx, cancel := caddy.NewContext(caddy.Context{Context: context.Background()})
