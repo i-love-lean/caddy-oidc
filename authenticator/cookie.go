@@ -18,8 +18,6 @@ import (
 	"github.com/gorilla/securecookie"
 	"github.com/relvacode/caddy-oidc/request"
 	"github.com/relvacode/caddy-oidc/session"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"golang.org/x/oauth2"
 )
 
@@ -66,6 +64,64 @@ func (ss SameSite) HTTPSameSite() http.SameSite {
 	}
 }
 
+func parseClaims(claims interface{ Claims(value any) error }) (map[string]json.RawMessage, error) {
+	var raw = make(map[string]json.RawMessage)
+
+	err := claims.Claims(&raw)
+	if err != nil {
+		return nil, err
+	}
+
+	return raw, nil
+}
+
+func extractClaims(dst, src map[string]json.RawMessage, keys ...string) {
+	for _, key := range keys {
+		value, ok := src[key]
+		if ok {
+			dst[key] = value
+		}
+	}
+}
+
+func extractAndVerifyIDToken(ctx context.Context, cfg OAuthAuthorizationFlowConfiguration, response *oauth2.Token) (*oidc.IDToken, error) {
+	idTokenPlain, ok := response.Extra("id_token").(string)
+	if !ok {
+		return nil, ErrNoIDToken
+	}
+
+	verifier, err := cfg.GetVerifier(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifier: %w", err)
+	}
+
+	idToken, err := verifier.Verify(ctx, idTokenPlain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify id_token: %w", err)
+	}
+
+	return idToken, nil
+}
+
+func extractUsernameClaim(claims map[string]json.RawMessage, name string) (string, error) {
+	uidJSON, ok := claims[name]
+	if !ok {
+		return "", session.MissingRequiredClaimError{Claim: name}
+	}
+
+	var uid string
+
+	err := json.Unmarshal(uidJSON, &uid)
+	if err != nil {
+		return "", errors.Join(
+			fmt.Errorf("expected a string value for %s claim: %w", name, err),
+			session.MissingRequiredClaimError{Claim: name},
+		)
+	}
+
+	return uid, nil
+}
+
 var (
 	_ caddy.Module          = (*SessionCookieAuthenticator)(nil)
 	_ caddy.Provisioner     = (*SessionCookieAuthenticator)(nil)
@@ -76,12 +132,16 @@ var (
 
 // SessionCookieAuthenticator authenticates the request from a signed cookie.
 type SessionCookieAuthenticator struct {
-	Name        string   `json:"name,omitempty"`
-	SameSite    SameSite `json:"same_site,omitempty"`
-	Insecure    bool     `json:"insecure,omitempty"`
-	Domain      string   `json:"domain,omitempty"`
-	Path        string   `json:"path,omitempty"`
-	Secret      string   `json:"secret,omitempty"`
+	Name     string   `json:"name,omitempty"`
+	SameSite SameSite `json:"same_site,omitempty"`
+	Insecure bool     `json:"insecure,omitempty"`
+	Domain   string   `json:"domain,omitempty"`
+	Path     string   `json:"path,omitempty"`
+	Secret   string   `json:"secret,omitempty"`
+	// IDClaims are the claims to extract from the ID token.
+	IDClaims []string `json:"id_claims,omitempty"`
+	// Claims are the claims to extract from the user info endpoint response.
+	// User info claims take precedence over ID token claims.
 	Claims      []string `json:"claims,omitempty"`
 	RedirectURL string   `json:"redirect_url,omitempty"`
 	// MaxAge is the cookie and session lifetime. When unset or zero, the browser
@@ -144,6 +204,8 @@ func (au *SessionCookieAuthenticator) unmarshalCookieDirective(d *caddyfile.Disp
 		}
 	case "claim":
 		au.Claims = append(au.Claims, d.RemainingArgs()...)
+	case "id_claim":
+		au.IDClaims = append(au.IDClaims, d.RemainingArgs()...)
 	case "secret":
 		if !d.Args(&au.Secret) {
 			return d.ArgErr()
@@ -388,41 +450,70 @@ func (au *SessionCookieAuthenticator) handleCallbackParseCSRFCookie(rw http.Resp
 }
 
 // handleCodeExchange performs the OAuth2 token exchange using the PKCE code Verifier.
-// It then verifies the ID token and returns the userinfo claims as well as the ID token expiry time.
+// It then verifies the ID token, extracts claims, and returns a constructed Session.
+// If any userinfo claims are requested, it also fetches and parses the userinfo response.
 func (au *SessionCookieAuthenticator) handleCodeExchange(
 	cfg OAuthAuthorizationFlowConfiguration,
 	r *http.Request,
 	pkceVerifier string,
-) (*oidc.UserInfo, time.Time, error) {
+) (*session.Session, error) {
 	response, err := cfg.Exchange(r.Context(), r.FormValue("code"),
 		oauth2.VerifierOption(pkceVerifier),
 		oauth2.SetAuthURLParam("redirect_uri", au.GetAbsRedirectURI(r).String()),
 	)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to exchange token: %w", err)
+		return nil, fmt.Errorf("failed to exchange token: %w", err)
 	}
 
-	idTokenPlain, ok := response.Extra("id_token").(string)
-	if !ok {
-		return nil, time.Time{}, ErrNoIDToken
-	}
-
-	verifier, err := cfg.GetVerifier(r.Context())
+	idToken, err := extractAndVerifyIDToken(r.Context(), cfg, response)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to get verifier: %w", err)
+		return nil, err
 	}
 
-	_, err = verifier.Verify(r.Context(), idTokenPlain)
+	idTokenClaims, err := parseClaims(idToken)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to verify id_token: %w", err)
+		return nil, fmt.Errorf("failed to parse id_token claims: %w", err)
 	}
+
+	expiresAt := idToken.Expiry
+	if au.MaxAge > 0 {
+		// Cookie session is self-contained (UID + claims); it does not re-check
+		// the access token. Allow lifetime independent of token Expiry.
+		expiresAt = cfg.Now().Add(time.Duration(au.MaxAge))
+	}
+
+	// Extract claims to store in the session cookie
+	var sessionClaims = make(map[string]json.RawMessage)
+
+	extractClaims(sessionClaims, idTokenClaims, au.IDClaims...)
 
 	userInfo, err := cfg.UserInfo(r.Context(), oauth2.StaticTokenSource(response))
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("failed to fetch userinfo: %w", err)
+		return nil, fmt.Errorf("failed to fetch userinfo: %w", err)
 	}
 
-	return userInfo, response.Expiry, nil
+	userInfoClaims, err := parseClaims(userInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse userinfo claims: %w", err)
+	}
+
+	extractClaims(sessionClaims, userInfoClaims, au.Claims...)
+
+	uid, err := extractUsernameClaim(userInfoClaims, cfg.GetUsernameClaim())
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract username claim from userinfo response claims: %w", err)
+	}
+
+	sessionClaimsJSON, err := json.Marshal(sessionClaims)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal session claims: %w", err)
+	}
+
+	return &session.Session{
+		UID:       uid,
+		Claims:    sessionClaimsJSON,
+		ExpiresAt: expiresAt.Unix(),
+	}, nil
 }
 
 // IsCallbackURL returns true if the request is a callback from the authorization endpoint.
@@ -448,15 +539,9 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 		return caddyhttp.Error(http.StatusBadRequest, err)
 	}
 
-	// Exchange code for ID token
-	userInfo, idTokenExpires, err := au.handleCodeExchange(cfg, r, csrfToken.PKCEVerifier)
+	s, err := au.handleCodeExchange(cfg, r, csrfToken.PKCEVerifier)
 	if err != nil {
 		return caddyhttp.Error(http.StatusBadRequest, err)
-	}
-
-	s, err := au.sessionFromUserInfo(cfg, userInfo, idTokenExpires)
-	if err != nil {
-		return err
 	}
 
 	cookieValue, err := au.secure.Encode(au.Name, s)
@@ -475,51 +560,6 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 	http.Redirect(rw, r, redirectURI, http.StatusFound)
 
 	return nil
-}
-
-// sessionFromUserInfo builds a session cookie payload from userinfo claims.
-// When MaxAge is set, session expiry is now+MaxAge rather than the OAuth token expiry.
-func (au *SessionCookieAuthenticator) sessionFromUserInfo(
-	cfg OIDCConfiguration,
-	userInfo *oidc.UserInfo,
-	idTokenExpires time.Time,
-) (*session.Session, error) {
-	var jsonClaims *json.RawMessage
-
-	err := userInfo.Claims(&jsonClaims)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract claims from user info: %w", err)
-	}
-
-	uidJSON := gjson.GetBytes(*jsonClaims, cfg.GetUsernameClaim())
-	if !uidJSON.Exists() || uidJSON.Type != gjson.String {
-		return nil, fmt.Errorf("invalid response from user info endpoint: %w", session.MissingRequiredClaimError{Claim: cfg.GetUsernameClaim()})
-	}
-
-	expiresAt := idTokenExpires
-	if au.MaxAge > 0 {
-		// Cookie session is self-contained (UID + claims); it does not re-check
-		// the access token. Allow lifetime independent of token Expiry.
-		expiresAt = cfg.Now().Add(time.Duration(au.MaxAge))
-	}
-
-	s := &session.Session{
-		UID:       uidJSON.String(),
-		Claims:    json.RawMessage(`{}`),
-		ExpiresAt: expiresAt.Unix(),
-	}
-
-	claimValues := gjson.GetManyBytes(*jsonClaims, au.Claims...)
-	for i, claimValue := range claimValues {
-		if claimValue.Exists() {
-			s.Claims, err = sjson.SetRawBytes(s.Claims, au.Claims[i], []byte(claimValue.Raw))
-			if err != nil {
-				return nil, fmt.Errorf("failed to set claim %s: %w", au.Claims[i], err)
-			}
-		}
-	}
-
-	return s, nil
 }
 
 func (au *SessionCookieAuthenticator) StripRequest(r *http.Request) {

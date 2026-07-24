@@ -51,6 +51,9 @@ func TestSessionCookieAuthenticator_UnmarshalCaddyfile(t *testing.T) {
 				insecure
 				domain example.com
 				path /auth
+				claim email
+				claim preferred_username
+				id_claim roles
 			}`,
 			expect: SessionCookieAuthenticator{
 				Name:     "block_cookie",
@@ -58,6 +61,8 @@ func TestSessionCookieAuthenticator_UnmarshalCaddyfile(t *testing.T) {
 				Insecure: true,
 				Domain:   "example.com",
 				Path:     "/auth",
+				Claims:   []string{"email", "preferred_username"},
+				IDClaims: []string{"roles"},
 			},
 		},
 		{
@@ -345,9 +350,10 @@ func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *test
 	t.Parallel()
 
 	au := &SessionCookieAuthenticator{
-		Name:   "test-cookie",
-		Secret: "Y4lbVNr01M4NyBCUSNbrAL4cavA6kjdM",
-		Claims: []string{"preferred_username", "roles", "email_verified"},
+		Name:     "test-cookie",
+		Secret:   "Y4lbVNr01M4NyBCUSNbrAL4cavA6kjdM",
+		Claims:   []string{"preferred_username", "roles", "email_verified"},
+		IDClaims: []string{"iss"},
 	}
 
 	ctx, cancel := caddy.NewContext(caddy.Context{Context: context.Background()})
@@ -408,6 +414,7 @@ func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *test
 	assert.Equal(t, "admin", s.UID)
 	assert.Equal(t, cfg.expires.Unix(), s.ExpiresAt)
 	assert.JSONEq(t, `{
+		"iss":"http://openid/example",
 		"preferred_username": "admin",
 		"roles": ["admin", "user"],
 		"email_verified": true

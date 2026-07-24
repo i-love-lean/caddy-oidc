@@ -33,7 +33,8 @@ RUN xcaddy build \
 
 `caddy-oidc` has a global and per-route `oidc` directive.
 
-The [global directive](#global-directive) is used to describe common OIDC provider configurations that can be used by multiple routes.
+The [global directive](#global-directive) is used to describe common OIDC provider configurations that can be used by
+multiple routes.
 
 ```caddyfile
 {
@@ -44,7 +45,8 @@ The [global directive](#global-directive) is used to describe common OIDC provid
 }
 ```
 
-A global directive can be given a name, which can be used to reference it in the [handler directive](#handler-directive).
+A global directive can be given a name, which can be used to reference it in
+the [handler directive](#handler-directive).
 A named global directive inherits the global default (unnamed) provider configuration.
 
 ```caddyfile
@@ -55,14 +57,14 @@ A named global directive inherits the global default (unnamed) provider configur
         # Inherits:
         # issuer https://accounts.google.com
         # client_id "<client_id>"
-        
+
         # Replaces `scope`
         scope openid email profile
     }
 }
 ```
 
-Each route that needs to be authenticated then uses the [handler directive](#handler-directive). 
+Each route that needs to be authenticated then uses the [handler directive](#handler-directive).
 The handler directive inherits provider configuration from the matching global `oidc` directive, but can be overridden
 and/or entirely defined inline, see [Inheritance](#inheritance).
 
@@ -75,13 +77,13 @@ example.com {
         # issuer https://accounts.google.com
         # client_id "<client_id>"
         # scope openid email profile
-        
+
         # Replaces any inherited `authenticate` configuration.
         authenticate bearer
-        
+
         # ...
         # Handler-specific directives
-        
+
         allow {
             user *
         }
@@ -92,7 +94,8 @@ example.com {
 
 ## Inheritance
 
-This module supports inheritance of configuration from global and named provider directives down to the handler directive.
+This module supports inheritance of configuration from global and named provider directives down to the handler
+directive.
 
 When a handler directive is provisioned, it will apply a baseline configuration from its inherited parent.
 Only fields that are not explicitly configured are inherited from the parent configuration.
@@ -105,12 +108,12 @@ Inheritance happens after configuration is parsed, so any explicit configuration
         issuer https://accounts.google.com
         client_id {env.OAUTH_CLIENT_ID}
     }
-    
+
     oidc example {
         # Inherits:
         # issuer https://accounts.google.com
         # client_id {env.OAUTH_CLIENT_ID}
-        
+
         scope openid email profile
     }
 }
@@ -121,7 +124,7 @@ example.com {
         # issuer https://accounts.google.com
         # client_id {env.OAUTH_CLIENT_ID}
         # scope openid email profile
-        
+
         # Replaces `scope`
         scope profile
     }
@@ -146,7 +149,8 @@ example.com {
 
 A global directive without a name is used to configure the default provider.
 
-The default provider is used as a baseline for any named provider configurations and any handler directives that do not explicitly configure a provider.
+The default provider is used as a baseline for any named provider configurations and any handler directives that do not
+explicitly configure a provider.
 
 ```caddyfile
 {
@@ -286,21 +290,22 @@ authenticate bearer
 
 The `cookie` authenticator is used to authenticate requests using a self-signed session cookie.
 
-| Option         | Description                                                                                                                                                 | Default            |
-|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
-| `name`         | The name of the cookie.                                                                                                                                     |                    |
-| `secret`       | The 32 or 64 byte secret key to encrypt session cookies                                                                                                     |                    |
-| `domain`       | (optional) The domain of the cookie.                                                                                                                        |                    |
-| `path`         | (optional) The path of the cookie.                                                                                                                          | `/`                |
-| `insecure`     | (optional) Disable secure cookies.                                                                                                                          |                    |
-| `same_site`    | (optional) The samesite mode of the cookie. One of `lax`, `strict` or `none`                                                                                |                    |
-| `claim`        | (optional) Claims to copy into the session cookie.                                                                                                          |                    |
-| `redirect_url` | (optional) The URL to redirect to after authentication. If the URL is relative, the fully qualified URL is constructed using the request host and protocol. | `/oauth2/callback` |
+| Option         | Description                                                                                                                                                                                                                                            | Default            |
+|----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `name`         | The name of the cookie.                                                                                                                                                                                                                                |                    |
+| `secret`       | The 32 or 64 byte secret key to encrypt session cookies                                                                                                                                                                                                |                    |
+| `domain`       | (optional) The domain of the cookie.                                                                                                                                                                                                                   |                    |
+| `path`         | (optional) The path of the cookie.                                                                                                                                                                                                                     | `/`                |
+| `insecure`     | (optional) Disable secure cookies.                                                                                                                                                                                                                     |                    |
+| `same_site`    | (optional) The samesite mode of the cookie. One of `lax`, `strict` or `none`                                                                                                                                                                           |                    |
+| `id_claim`     | (optional) Claims to copy from the ID token.                                                                                                                                                                                                           |                    |                                                                                                                                                                                                                                    
+| `claim`        | (optional) Claims to copy from the [User Info](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo) endpoint.  Takes precedence over `id_claim`                                                                                             |                    |
+| `redirect_url` | (optional) The URL to redirect to after authentication. If the URL is relative, the fully qualified URL is constructed using the request host and protocol.                                                                                            | `/oauth2/callback` |
 | `max_age`      | (optional) Cookie and session lifetime (e.g. `168h`). When set, the browser cookie uses `Max-Age` and session expiry is `now+max_age` instead of the OAuth token expiry. Omit or `0` for a browser session cookie with expiry from the token response. |                    |
 
 To minimize the size of the cookie, no claims are copied into the session cookie by default.
-Claims can be copied by specifying the `claims` option if needed for access policy rules or placeholder variables (e.g.,
-for logging).
+Claims can be copied by specifying the `claim` or `id_claim` option 
+if needed for access policy rules or placeholder variables (e.g., for logging).
 
 Enabling session cookie authentication also enables interactive authentication through
 the browser via the OAuth 2.0 Authorization Code Flow.
@@ -375,7 +380,7 @@ protected_resource_metadata {
 ## Handler Directive
 
 The handler directive is placed on routes to provide authentication and authorization for that route.
-These directives inherit configuration from the global `oidc` directive. If a specific provider is named, 
+These directives inherit configuration from the global `oidc` directive. If a specific provider is named,
 then it uses that, otherwise it inherits the global defaults. See [Inheritance](#inheritance) for more information.
 
 A route is only authenticated by `caddy-oidc` if it is configured with at least once `oidc` handler directive.
