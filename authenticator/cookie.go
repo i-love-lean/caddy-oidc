@@ -84,6 +84,11 @@ type SessionCookieAuthenticator struct {
 	Secret      string   `json:"secret,omitempty"`
 	Claims      []string `json:"claims,omitempty"`
 	RedirectURL string   `json:"redirect_url,omitempty"`
+	// MaxAge is the cookie and session lifetime. When unset or zero, the browser
+	// gets a session cookie and session expiry follows the OAuth token response.
+	// When set, the browser cookie uses Max-Age and session ExpiresAt is set to
+	// now+MaxAge (cookie sessions do not re-validate the access token).
+	MaxAge caddy.Duration `json:"max_age,omitempty"`
 
 	secure      *securecookie.SecureCookie
 	redirectURL *url.URL
@@ -110,46 +115,78 @@ func (au *SessionCookieAuthenticator) UnmarshalCaddyfile(d *caddyfile.Dispenser)
 	}
 
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
-		switch d.Val() {
-		case "name":
-			if !d.Args(&au.Name) {
-				return d.ArgErr()
-			}
-		case "same_site":
-			if !d.NextArg() {
-				return d.ArgErr()
-			}
-
-			ss, err := ParseSameSite(d.Val())
-			if err != nil {
-				return err
-			}
-
-			au.SameSite = ss
-		case "insecure":
-			au.Insecure = true
-		case "domain":
-			if !d.Args(&au.Domain) {
-				return d.ArgErr()
-			}
-		case "path":
-			if !d.Args(&au.Path) {
-				return d.ArgErr()
-			}
-		case "claim":
-			au.Claims = append(au.Claims, d.RemainingArgs()...)
-		case "secret":
-			if !d.Args(&au.Secret) {
-				return d.ArgErr()
-			}
-		case "redirect_url":
-			if !d.Args(&au.RedirectURL) {
-				return d.ArgErr()
-			}
-		default:
-			return d.Errf("unrecognized cookie subdirective: %s", d.Val())
+		err := au.unmarshalCookieDirective(d)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
+}
+
+func (au *SessionCookieAuthenticator) unmarshalCookieDirective(d *caddyfile.Dispenser) error {
+	switch d.Val() {
+	case "name":
+		if !d.Args(&au.Name) {
+			return d.ArgErr()
+		}
+	case "same_site":
+		return au.unmarshalSameSite(d)
+	case "insecure":
+		au.Insecure = true
+	case "domain":
+		if !d.Args(&au.Domain) {
+			return d.ArgErr()
+		}
+	case "path":
+		if !d.Args(&au.Path) {
+			return d.ArgErr()
+		}
+	case "claim":
+		au.Claims = append(au.Claims, d.RemainingArgs()...)
+	case "secret":
+		if !d.Args(&au.Secret) {
+			return d.ArgErr()
+		}
+	case "redirect_url":
+		if !d.Args(&au.RedirectURL) {
+			return d.ArgErr()
+		}
+	case "max_age":
+		return au.unmarshalMaxAge(d)
+	default:
+		return d.Errf("unrecognized cookie subdirective: %s", d.Val())
+	}
+
+	return nil
+}
+
+func (au *SessionCookieAuthenticator) unmarshalSameSite(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+
+	ss, err := ParseSameSite(d.Val())
+	if err != nil {
+		return err
+	}
+
+	au.SameSite = ss
+
+	return nil
+}
+
+func (au *SessionCookieAuthenticator) unmarshalMaxAge(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+
+	dur, err := caddy.ParseDuration(d.Val())
+	if err != nil {
+		return d.Errf("invalid max_age: %v", err)
+	}
+
+	au.MaxAge = caddy.Duration(dur)
 
 	return nil
 }
@@ -256,7 +293,7 @@ func (au *SessionCookieAuthenticator) AuthenticateRequest(cfg OIDCConfiguration,
 }
 
 func (au *SessionCookieAuthenticator) NewCookie(value string) *http.Cookie {
-	return &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     au.Name,
 		Value:    value,
 		SameSite: au.SameSite.HTTPSameSite(),
@@ -265,6 +302,12 @@ func (au *SessionCookieAuthenticator) NewCookie(value string) *http.Cookie {
 		HttpOnly: true,
 		Secure:   !au.Insecure,
 	}
+
+	if au.MaxAge > 0 {
+		cookie.MaxAge = int(time.Duration(au.MaxAge).Seconds())
+	}
+
+	return cookie
 }
 
 // CSRFToken is the CSRF cookie payload when perform an OAuth2 Authorization Flow.
@@ -411,33 +454,9 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 		return caddyhttp.Error(http.StatusBadRequest, err)
 	}
 
-	var jsonClaims *json.RawMessage
-
-	err = userInfo.Claims(&jsonClaims)
+	s, err := au.sessionFromUserInfo(cfg, userInfo, idTokenExpires)
 	if err != nil {
-		return fmt.Errorf("failed to extract claims from user info: %w", err)
-	}
-
-	uidJSON := gjson.GetBytes(*jsonClaims, cfg.GetUsernameClaim())
-	if !uidJSON.Exists() || uidJSON.Type != gjson.String {
-		return fmt.Errorf("invalid response from user info endpoint: %w", session.MissingRequiredClaimError{Claim: cfg.GetUsernameClaim()})
-	}
-
-	s := &session.Session{
-		UID:       uidJSON.String(),
-		Claims:    json.RawMessage(`{}`),
-		ExpiresAt: idTokenExpires.Unix(),
-	}
-
-	// Copy claims
-	claimValues := gjson.GetManyBytes(*jsonClaims, au.Claims...)
-	for i, claimValue := range claimValues {
-		if claimValue.Exists() {
-			s.Claims, err = sjson.SetRawBytes(s.Claims, au.Claims[i], []byte(claimValue.Raw))
-			if err != nil {
-				return fmt.Errorf("failed to set claim %s: %w", au.Claims[i], err)
-			}
-		}
+		return err
 	}
 
 	cookieValue, err := au.secure.Encode(au.Name, s)
@@ -456,6 +475,51 @@ func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowC
 	http.Redirect(rw, r, redirectURI, http.StatusFound)
 
 	return nil
+}
+
+// sessionFromUserInfo builds a session cookie payload from userinfo claims.
+// When MaxAge is set, session expiry is now+MaxAge rather than the OAuth token expiry.
+func (au *SessionCookieAuthenticator) sessionFromUserInfo(
+	cfg OIDCConfiguration,
+	userInfo *oidc.UserInfo,
+	idTokenExpires time.Time,
+) (*session.Session, error) {
+	var jsonClaims *json.RawMessage
+
+	err := userInfo.Claims(&jsonClaims)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract claims from user info: %w", err)
+	}
+
+	uidJSON := gjson.GetBytes(*jsonClaims, cfg.GetUsernameClaim())
+	if !uidJSON.Exists() || uidJSON.Type != gjson.String {
+		return nil, fmt.Errorf("invalid response from user info endpoint: %w", session.MissingRequiredClaimError{Claim: cfg.GetUsernameClaim()})
+	}
+
+	expiresAt := idTokenExpires
+	if au.MaxAge > 0 {
+		// Cookie session is self-contained (UID + claims); it does not re-check
+		// the access token. Allow lifetime independent of token Expiry.
+		expiresAt = cfg.Now().Add(time.Duration(au.MaxAge))
+	}
+
+	s := &session.Session{
+		UID:       uidJSON.String(),
+		Claims:    json.RawMessage(`{}`),
+		ExpiresAt: expiresAt.Unix(),
+	}
+
+	claimValues := gjson.GetManyBytes(*jsonClaims, au.Claims...)
+	for i, claimValue := range claimValues {
+		if claimValue.Exists() {
+			s.Claims, err = sjson.SetRawBytes(s.Claims, au.Claims[i], []byte(claimValue.Raw))
+			if err != nil {
+				return nil, fmt.Errorf("failed to set claim %s: %w", au.Claims[i], err)
+			}
+		}
+	}
+
+	return s, nil
 }
 
 func (au *SessionCookieAuthenticator) StripRequest(r *http.Request) {

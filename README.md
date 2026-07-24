@@ -239,6 +239,7 @@ The `cookie` authenticator is used to authenticate requests using a self-signed 
 | `same_site`    | (optional) The samesite mode of the cookie. One of `lax`, `strict` or `none`                                                                                |                    |
 | `claim`        | (optional) Claims to copy into the session cookie.                                                                                                          |                    |
 | `redirect_url` | (optional) The URL to redirect to after authentication. If the URL is relative, the fully qualified URL is constructed using the request host and protocol. | `/oauth2/callback` |
+| `max_age`      | (optional) Cookie and session lifetime (e.g. `168h`). When set, the browser cookie uses `Max-Age` and session expiry is `now+max_age` instead of the OAuth token expiry. Omit or `0` for a browser session cookie with expiry from the token response. |                    |
 
 To minimize the size of the cookie, no claims are copied into the session cookie by default.
 Claims can be copied by specifying the `claims` option if needed for access policy rules or placeholder variables (e.g.,
