@@ -33,27 +33,98 @@ RUN xcaddy build \
 
 `caddy-oidc` has a global and per-route `oidc` directive.
 
-The global directive is used to configure the OIDC provider. An example minimum configuration is shown below.
+The [global directive](#global-directive) is used to describe common OIDC provider configurations that can be used by multiple routes.
 
 ```caddyfile
 {
-    oidc example {
+    oidc {
         issuer https://accounts.google.com
         client_id "<client_id>"
     }
 }
 ```
 
-Each route then uses the `oidc` directive to configure the route using the named provider
+A global directive can be given a name, which can be used to reference it in the [handler directive](#handler-directive).
+A named global directive inherits the global default (unnamed) provider configuration.
+
+```caddyfile
+{
+    # Inherits the global "default" provider configuration.
+    # Any properties set here will override the global default provider.
+    oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id "<client_id>"
+        
+        # Replaces `scope`
+        scope openid email profile
+    }
+}
+```
+
+Each route that needs to be authenticated then uses the [handler directive](#handler-directive). 
+The handler directive inherits provider configuration from the matching global `oidc` directive, but can be overridden
+and/or entirely defined inline, see [Inheritance](#inheritance).
 
 ```caddyfile
 example.com {
+    # Inherit the global "example" provider configuration.
+    # A provider name can be omitted to use the global default.
     oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id "<client_id>"
+        # scope openid email profile
+        
+        # Replaces any inherited `authenticate` configuration.
+        authenticate bearer
+        
+        # ...
+        # Handler-specific directives
+        
         allow {
             user *
         }
     }
     reverse_proxy localhost:8080
+}
+```
+
+## Inheritance
+
+This module supports inheritance of configuration from global and named provider directives down to the handler directive.
+
+When a handler directive is provisioned, it will apply a baseline configuration from its inherited parent.
+Only fields that are not explicitly configured are inherited from the parent configuration.
+
+Inheritance happens after configuration is parsed, so any explicit configuration will override inherited configuration.
+
+```caddyfile
+{
+    oidc {
+        issuer https://accounts.google.com
+        client_id {env.OAUTH_CLIENT_ID}
+    }
+    
+    oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id {env.OAUTH_CLIENT_ID}
+        
+        scope openid email profile
+    }
+}
+
+example.com {
+    oidc example {
+        # Inherits:
+        # issuer https://accounts.google.com
+        # client_id {env.OAUTH_CLIENT_ID}
+        # scope openid email profile
+        
+        # Replaces `scope`
+        scope profile
+    }
 }
 ```
 
@@ -75,11 +146,7 @@ example.com {
 
 A global directive without a name is used to configure the default provider.
 
-The default provider is used when no provider name is specified in the handler-specific `oidc` directive and serves
-as a baseline inherited configuration for named providers defined after the default provider.
-
-When a named provider is configured, whatever the current default provider configuration is cloned and used as the
-baseline for the named provider. This means any defaults **must** be configured before a named provider is configured.
+The default provider is used as a baseline for any named provider configurations and any handler directives that do not explicitly configure a provider.
 
 ```caddyfile
 {
@@ -87,16 +154,6 @@ baseline for the named provider. This means any defaults **must** be configured 
     oidc {
         issuer https://accounts.google.com
         client_id {env.OAUTH_CLIENT_ID}
-    }
-
-    # An `oidc` directive with a name is used to configure a named provider
-    # it implicitly inherits the default provider configuration.
-    oidc default_with_scopes {
-        # Inherits:
-        # issuer https://accounts.google.com
-        # client_id {env.OAUTH_CLIENT_ID}
-
-        scope openid email profile
     }
 }
 ```
@@ -318,27 +375,12 @@ protected_resource_metadata {
 ## Handler Directive
 
 The handler directive is placed on routes to provide authentication and authorization for that route.
-Requests are authenticated according to the configured OIDC provider and then authorized according to access policy
-rules configured in the directive.
+These directives inherit configuration from the global `oidc` directive. If a specific provider is named, 
+then it uses that, otherwise it inherits the global defaults. See [Inheritance](#inheritance) for more information.
 
 A route is only authenticated by `caddy-oidc` if it is configured with at least once `oidc` handler directive.
 
 The handler directive **must** contain at least one `allow` rule.
-
-```caddyfile
-# Allow any valid authenticated user
-
-example.com {
-    # Use the "example" provider configuration.
-    # A name can be omitted to use the default provider.
-    oidc example {
-        allow {
-            user *
-        }
-    }
-    reverse_proxy localhost:8080
-}
-```
 
 If the request is unauthenticated, and there is not an explicit `allow` or `deny` rule that matches the request,
 and the request is made by a browser, then the browser will be automatically redirected to the OIDC provider for

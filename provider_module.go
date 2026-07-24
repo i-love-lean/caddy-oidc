@@ -58,6 +58,68 @@ func (*OIDCProviderModule) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
+func (m *OIDCProviderModule) UnmarshalCaddyfileToken(d *caddyfile.Dispenser) (bool, error) {
+	switch d.Val() {
+	case "issuer":
+		if !d.Args(&m.Issuer) {
+			return false, d.ArgErr()
+		}
+	case "client_id":
+		if !d.Args(&m.ClientID) {
+			return false, d.ArgErr()
+		}
+	case "client_secret":
+		if !d.Args(&m.ClientSecret) {
+			return false, d.ArgErr()
+		}
+
+	case "username":
+		if !d.Args(&m.Username) {
+			return false, d.ArgErr()
+		}
+	case "authenticate":
+		if m.Authenticators == nil {
+			m.Authenticators = new(authenticator.Set)
+		}
+
+		err := m.Authenticators.UnmarshalCaddyfile(d)
+		if err != nil {
+			return false, err
+		}
+
+	case "protected_resource_metadata":
+		m.ProtectedResourceMetadata = new(ProtectedResourceMetadataConfiguration)
+
+		d.Prev()
+
+		err := m.ProtectedResourceMetadata.UnmarshalCaddyfile(d)
+		if err != nil {
+			return false, err
+		}
+	case "tls_insecure_skip_verify":
+		m.TLSInsecureSkipVerify = true
+	case "token_params":
+		m.TokenParams = make(map[string]string)
+
+		for nesting := d.Nesting(); d.NextBlock(nesting); {
+			key := d.Val()
+
+			var value string
+			if !d.Args(&value) {
+				return false, d.ArgErr()
+			}
+
+			m.TokenParams[key] = value
+		}
+	case "scope":
+		m.Scope = append(m.Scope, d.RemainingArgs()...)
+	default:
+		return false, nil
+	}
+
+	return true, nil
+}
+
 // UnmarshalCaddyfile sets up the OIDCProviderModule instance from Caddyfile tokens.
 /*
 	{
@@ -69,65 +131,15 @@ func (*OIDCProviderModule) CaddyModule() caddy.ModuleInfo {
 		protected_resource <protected_resource>
 	}
 */
-//nolint:gocognit // function is long due to Caddyfile parsing structure
 func (m *OIDCProviderModule) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
-		switch d.Val() {
-		case "issuer":
-			if !d.Args(&m.Issuer) {
-				return d.ArgErr()
-			}
-		case "client_id":
-			if !d.Args(&m.ClientID) {
-				return d.ArgErr()
-			}
-		case "client_secret":
-			if !d.Args(&m.ClientSecret) {
-				return d.ArgErr()
-			}
+		ok, err := m.UnmarshalCaddyfileToken(d)
+		if err != nil {
+			return err
+		}
 
-		case "username":
-			if !d.Args(&m.Username) {
-				return d.ArgErr()
-			}
-		case "authenticate":
-			if m.Authenticators == nil {
-				m.Authenticators = new(authenticator.Set)
-			}
-
-			err := m.Authenticators.UnmarshalCaddyfile(d)
-			if err != nil {
-				return err
-			}
-
-		case "protected_resource_metadata":
-			m.ProtectedResourceMetadata = new(ProtectedResourceMetadataConfiguration)
-
-			d.Prev()
-
-			err := m.ProtectedResourceMetadata.UnmarshalCaddyfile(d)
-			if err != nil {
-				return err
-			}
-		case "tls_insecure_skip_verify":
-			m.TLSInsecureSkipVerify = true
-		case "token_params":
-			m.TokenParams = make(map[string]string)
-
-			for nesting := d.Nesting(); d.NextBlock(nesting); {
-				key := d.Val()
-
-				var value string
-				if !d.Args(&value) {
-					return d.ArgErr()
-				}
-
-				m.TokenParams[key] = value
-			}
-		case "scope":
-			m.Scope = append(m.Scope, d.RemainingArgs()...)
-		default:
-			return d.Errf("unrecognized oidc subdirective '%s'", d.Val())
+		if !ok {
+			return d.SyntaxErr("unrecognized subdirective")
 		}
 	}
 

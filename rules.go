@@ -80,6 +80,32 @@ var _ caddy.Validator = (*Ruleset)(nil)
 // A Ruleset is a set of authorization rules.
 type Ruleset []*Rule
 
+func (rules *Ruleset) UnmarshalCaddyfileToken(d *caddyfile.Dispenser) (bool, error) {
+	var pol Rule
+
+	switch d.Val() {
+	case "allow":
+		pol.Action = ActionAllow
+	case "deny":
+		pol.Action = ActionDeny
+	default:
+		return false, nil
+	}
+
+	_ = d.Args(&pol.ID)
+
+	var err error
+
+	pol.MatcherSetsRaw, err = caddyhttp.ParseCaddyfileNestedMatcherSet(d)
+	if err != nil {
+		return false, err
+	}
+
+	*rules = append(*rules, &pol)
+
+	return true, nil
+}
+
 // UnmarshalCaddyfile sets up the Ruleset from Caddyfile tokens.
 // Syntax:
 //
@@ -88,27 +114,14 @@ type Ruleset []*Rule
 //	}
 func (rules *Ruleset) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
-		var pol Rule
-
-		switch d.Val() {
-		case "allow":
-			pol.Action = ActionAllow
-		case "deny":
-			pol.Action = ActionDeny
-		default:
-			return d.Errf("unrecognized action '%s'", d.Val())
-		}
-
-		_ = d.Args(&pol.ID)
-
-		var err error
-
-		pol.MatcherSetsRaw, err = caddyhttp.ParseCaddyfileNestedMatcherSet(d)
+		ok, err := rules.UnmarshalCaddyfileToken(d)
 		if err != nil {
 			return err
 		}
 
-		*rules = append(*rules, &pol)
+		if !ok {
+			return d.Err("expected 'allow' or 'deny'")
+		}
 	}
 
 	return nil

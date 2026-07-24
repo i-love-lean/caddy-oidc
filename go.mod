@@ -9,7 +9,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/huandu/go-clone/generic v1.7.3
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0

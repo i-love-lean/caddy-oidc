@@ -39,6 +39,7 @@ linters:
       ignore-names:
         - au
         - tt
+        - ok
       ignore-decls:
         - rw http.ResponseWriter
         - r *http.Request
@@ -67,6 +68,11 @@ linters:
       tab-width: 4
     funcorder:
       struct-method: false
+    staticcheck:
+      checks:
+        - all
+        - -QF1008
+        - -ST1003
     depguard:
       rules:
         main:
