@@ -30,9 +30,22 @@ func URL(r *http.Request) *url.URL {
 
 // IsBrowserInteractive returns true if the request is likely coming from a browser.
 func IsBrowserInteractive(r *http.Request) bool {
+	// Navigation mode directly identifies a document navigation, even when the
+	// destination has been generalized or omitted.
+	if r.Header.Get("Sec-Fetch-Mode") == "navigate" {
+		return true
+	}
+
 	dest := r.Header.Get("Sec-Fetch-Dest")
 	if dest != "" {
-		return dest == "document" || dest == "iframe"
+		if dest == "document" || dest == "iframe" {
+			return true
+		}
+
+		// A service worker may replace navigation Fetch Metadata while retaining
+		// the browser's navigation preference and accepted document type.
+		return dest == "empty" && r.Header.Get("Upgrade-Insecure-Requests") == "1" &&
+			goautoneg.Negotiate(r.Header.Get("Accept"), []string{"text/html"}) == "text/html"
 	}
 
 	// Fallback for older browsers: check Accept header for HTML.

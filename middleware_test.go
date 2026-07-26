@@ -120,7 +120,10 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_AuthorizationFlowSupported(t *test
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.Header.Set("Sec-Fetch-Dest", "document")
+	r.Header.Set("Accept", "text/html")
+	r.Header.Set("Sec-Fetch-Mode", "same-origin")
+	r.Header.Set("Sec-Fetch-Dest", "empty")
+	r.Header.Set("Upgrade-Insecure-Requests", "1")
 
 	h := new(TestHandler)
 

@@ -104,6 +104,43 @@ func TestShouldStartLogin(t *testing.T) {
 		r.Header.Set("Sec-Fetch-Dest", "document")
 		assert.True(t, IsBrowserInteractive(r))
 	})
+	t.Run("navigation mode with empty destination", func(t *testing.T) {
+		t.Parallel()
+
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Sec-Fetch-Mode", "navigate")
+		r.Header.Set("Sec-Fetch-Dest", "empty")
+		assert.True(t, IsBrowserInteractive(r))
+	})
+	t.Run("service worker navigation", func(t *testing.T) {
+		t.Parallel()
+
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "text/html")
+		r.Header.Set("Sec-Fetch-Mode", "same-origin")
+		r.Header.Set("Sec-Fetch-Dest", "empty")
+		r.Header.Set("Upgrade-Insecure-Requests", "1")
+		assert.True(t, IsBrowserInteractive(r))
+	})
+	t.Run("non-navigation with empty destination", func(t *testing.T) {
+		t.Parallel()
+
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "text/html")
+		r.Header.Set("Sec-Fetch-Mode", "same-origin")
+		r.Header.Set("Sec-Fetch-Dest", "empty")
+		assert.False(t, IsBrowserInteractive(r))
+	})
+	t.Run("service worker request without HTML", func(t *testing.T) {
+		t.Parallel()
+
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Accept", "application/json")
+		r.Header.Set("Sec-Fetch-Mode", "same-origin")
+		r.Header.Set("Sec-Fetch-Dest", "empty")
+		r.Header.Set("Upgrade-Insecure-Requests", "1")
+		assert.False(t, IsBrowserInteractive(r))
+	})
 	t.Run("accept HTML", func(t *testing.T) {
 		t.Parallel()
 
