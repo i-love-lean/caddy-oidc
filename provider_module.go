@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/relvacode/caddy-oidc/authenticator"
 	"github.com/relvacode/caddy-oidc/internal/deferred"
+	"github.com/relvacode/caddy-oidc/template"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 	"golang.org/x/oauth2"
@@ -224,7 +225,7 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 			ProtectedResource: m.ProtectedResourceMetadata,
 			Issuer:            m.Issuer,
 			UsernameClaim:     m.Username,
-			Discovery: deferred.Defer[*providerDiscoveryConfiguration](func() (*providerDiscoveryConfiguration, error) {
+			Discovery: deferred.Defer[*discoveryConfiguration](func() (*discoveryConfiguration, error) {
 				providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
 				provider, err := oidc.NewProvider(providerCtx, m.Issuer)
@@ -234,23 +235,19 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 
 				log.Debug("OIDC provider discovery successful", zap.Any("discovery", provider.Endpoint()))
 
-				oauthClient := &oauth2ClientTemplate{
-					httpClient: httpClient,
-					template: &oauth2.Config{
-						ClientID:     m.ClientID,
-						ClientSecret: m.ClientSecret,
-						Endpoint:     provider.Endpoint(),
-						Scopes:       m.Scope,
-					},
-					tokenParams: m.TokenParams,
+				oauthConfigTemplate := &template.OAuth2ConfigTemplate{
+					TemplateClientID:     m.ClientID,
+					TemplateClientSecret: m.ClientSecret,
+					Endpoint:             provider.Endpoint(),
+					Scopes:               m.Scope,
 				}
 
-				return &providerDiscoveryConfiguration{
-					Verifier: provider.Verifier(&oidc.Config{
-						ClientID: m.ClientID,
-					}),
-					UserInfo: provider,
-					OAuth2:   oauthClient,
+				return &discoveryConfiguration{
+					HTTPClient:  httpClient,
+					Provider:    provider,
+					Verifier:    template.NewReplacerTokenVerifierFromProvider(m.ClientSecret, provider),
+					OAuth2:      oauthConfigTemplate,
+					TokenParams: m.TokenParams,
 				}, nil
 			}),
 		}

@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/caddyserver/caddy/v2"
 	"github.com/relvacode/caddy-oidc/authenticator"
+	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/relvacode/caddy-oidc/session"
+	"github.com/relvacode/caddy-oidc/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -146,10 +146,10 @@ func TestMatchUser_MatchWithError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
-			repl := caddy.NewReplacer()
-			repl.Set("test.domain", "example.com")
-			r = r.WithContext(context.WithValue(r.Context(), caddy.ReplacerCtxKey, repl))
+			r := pkgtest.NewRequest(http.MethodGet, "/", nil)
+
+			template.MustReplacer(r.Context()).Set("test.domain", "example.com")
+
 			r = r.WithContext(context.WithValue(r.Context(), SessionCtxKey, &tt.session))
 
 			ok, err := tt.matcher.MatchWithError(r)
@@ -188,7 +188,7 @@ func TestMatchAnonymous_MatchWithError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 			if tt.session != nil {
 				r = r.WithContext(context.WithValue(r.Context(), SessionCtxKey, tt.session))
@@ -320,14 +320,12 @@ func TestMatchClaim_MatchWithError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 			r = r.WithContext(context.WithValue(r.Context(), SessionCtxKey, &session.Session{
 				Claims: json.RawMessage(tt.claims),
 			}))
 
-			repl := caddy.NewReplacer()
-			repl.Set("http.host", "example.com")
-			r = r.WithContext(context.WithValue(r.Context(), caddy.ReplacerCtxKey, repl))
+			template.MustReplacer(r.Context()).Set("http.host", "example.com")
 
 			ok, err := tt.matcher.MatchWithError(r)
 			require.NoError(t, err)
@@ -375,7 +373,7 @@ func TestMatchAuthMethod_MatchWithError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 			r = r.WithContext(context.WithValue(r.Context(), AuthMethodCtxKey, tt.method))
 
 			ok, err := tt.matcher.MatchWithError(r)

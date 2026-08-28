@@ -8,50 +8,47 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/relvacode/caddy-oidc/authenticator"
 	"github.com/relvacode/caddy-oidc/internal/deferred"
 	"github.com/relvacode/caddy-oidc/request"
+	"github.com/relvacode/caddy-oidc/template"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
 
-// oauth2Client is an interface for the oauth2 client.
-type oauth2Client interface {
-	AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string
-	Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error)
-	Scopes() []string
-	ClientID() string
+type discoveryConfiguration struct {
+	HTTPClient  *http.Client
+	Provider    *oidc.Provider
+	Verifier    template.TokenVerifier
+	OAuth2      *template.OAuth2ConfigTemplate
+	TokenParams map[string]string
 }
 
-// oauth2ClientTemplate wraps an oauth2.Config to inject an HTTP client instance for token exchange
-// and provide request-time Caddy replacer replacement.
-type oauth2ClientTemplate struct {
-	httpClient  *http.Client
-	template    *oauth2.Config
-	tokenParams map[string]string
-}
+func (cfg *discoveryConfiguration) AuthCodeURL(ctx context.Context, state string, opts ...oauth2.AuthCodeOption) (string, error) {
+	repl := template.MustReplacer(ctx)
 
-func (c *oauth2ClientTemplate) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	//nolint:forcetypeassert // Caddy will always provide a replacer in the context. A missing replacer will result in a panic.
-	repl := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
-
-	cfg := new(oauth2.Config)
-	*cfg = *c.template
-
-	var err error
-
-	cfg.ClientSecret, err = repl.ReplaceOrErr(c.template.ClientSecret, false, true)
+	oauthCfg, err := cfg.OAuth2.Replace(repl)
 	if err != nil {
-		return nil, fmt.Errorf("failed to replace client secret: %w", err)
+		return "", err
 	}
 
-	if len(c.tokenParams) > 0 {
-		for urlParam, v := range c.tokenParams {
+	return oauthCfg.AuthCodeURL(state, opts...), nil
+}
+
+func (cfg *discoveryConfiguration) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	repl := template.MustReplacer(ctx)
+
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HTTPClient)
+
+	oauthCfg, err := cfg.OAuth2.Replace(repl)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cfg.TokenParams) > 0 {
+		for urlParam, v := range cfg.TokenParams {
 			pv, err := repl.ReplaceOrErr(v, false, true)
 			if err != nil {
 				return nil, fmt.Errorf("failed to replace token param %s: %w", urlParam, err)
@@ -61,29 +58,13 @@ func (c *oauth2ClientTemplate) Exchange(ctx context.Context, code string, opts .
 		}
 	}
 
-	return cfg.Exchange(ctx, code, opts...)
+	return oauthCfg.Exchange(ctx, code, opts...)
 }
 
-func (c *oauth2ClientTemplate) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
-	return c.template.AuthCodeURL(state, opts...)
-}
+func (cfg *discoveryConfiguration) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource) (*oidc.UserInfo, error) {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HTTPClient)
 
-func (c *oauth2ClientTemplate) Scopes() []string {
-	return c.template.Scopes
-}
-
-func (c *oauth2ClientTemplate) ClientID() string {
-	return c.template.ClientID
-}
-
-type userInfoClient interface {
-	UserInfo(ctx context.Context, tokenSource oauth2.TokenSource) (*oidc.UserInfo, error)
-}
-
-type providerDiscoveryConfiguration struct {
-	Verifier *oidc.IDTokenVerifier
-	UserInfo userInfoClient
-	OAuth2   oauth2Client
+	return cfg.Provider.UserInfo(ctx, tokenSource)
 }
 
 var (
@@ -99,13 +80,13 @@ type Provider struct {
 	UsernameClaim     string
 	ProtectedResource *ProtectedResourceMetadataConfiguration
 	Authenticators    authenticator.Set
-	Discovery         *deferred.Result[*providerDiscoveryConfiguration]
+	Discovery         *deferred.Result[*discoveryConfiguration]
 }
 
 func (pr *Provider) Now() time.Time           { return pr.Clock() }
 func (pr *Provider) GetUsernameClaim() string { return pr.UsernameClaim }
 
-func (pr *Provider) GetVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+func (pr *Provider) GetVerifier(ctx context.Context) (template.TokenVerifier, error) {
 	discovery, err := pr.Discovery.Get(ctx)
 	if err != nil {
 		return nil, err
@@ -120,7 +101,7 @@ func (pr *Provider) AuthCodeURL(ctx context.Context, state string, opts ...oauth
 		return "", err
 	}
 
-	return discovery.OAuth2.AuthCodeURL(state, opts...), nil
+	return discovery.AuthCodeURL(ctx, state, opts...)
 }
 
 func (pr *Provider) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
@@ -129,7 +110,7 @@ func (pr *Provider) Exchange(ctx context.Context, code string, opts ...oauth2.Au
 		return nil, err
 	}
 
-	return discovery.OAuth2.Exchange(ctx, code, opts...)
+	return discovery.Exchange(ctx, code, opts...)
 }
 
 func (pr *Provider) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource) (*oidc.UserInfo, error) {
@@ -138,7 +119,7 @@ func (pr *Provider) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource
 		return nil, err
 	}
 
-	return discovery.UserInfo.UserInfo(ctx, tokenSource)
+	return discovery.UserInfo(ctx, tokenSource)
 }
 
 // ProtectedResourceMetadata returns the OAuth protected resource metadata for this authenticator.
@@ -157,7 +138,7 @@ func (pr *Provider) ProtectedResourceMetadata(r *http.Request) (*OAuthProtectedR
 		requestURL = request.URL(r)
 		metadata   = &OAuthProtectedResource{
 			Resource:        fmt.Sprintf("%s://%s", requestURL.Scheme, requestURL.Host),
-			ScopesSupported: discovery.OAuth2.Scopes(),
+			ScopesSupported: discovery.OAuth2.Scopes,
 			AuthorizationServers: []string{
 				pr.Issuer,
 			},
@@ -169,7 +150,10 @@ func (pr *Provider) ProtectedResourceMetadata(r *http.Request) (*OAuthProtectedR
 	)
 
 	if pr.ProtectedResource.Audience {
-		metadata.Audience = discovery.OAuth2.ClientID()
+		metadata.Audience, err = discovery.OAuth2.ClientID(template.MustReplacer(r.Context()))
+		if err != nil {
+			return nil, false
+		}
 	}
 
 	return metadata, true

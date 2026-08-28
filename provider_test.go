@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/relvacode/caddy-oidc/authenticator"
 	"github.com/relvacode/caddy-oidc/internal/deferred"
 	"github.com/relvacode/caddy-oidc/internal/pkgtest"
+	"github.com/relvacode/caddy-oidc/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -24,34 +24,35 @@ func (f HTTPTransportFunc) RoundTrip(req *http.Request) (*http.Response, error) 
 	return f(req)
 }
 
-func TestOauth2ClientTemplate_Exchange_ReplacerVars(t *testing.T) {
+func TestDiscoveryConfiguration_Exchange_ReplacerVars(t *testing.T) {
 	t.Parallel()
 
 	var errTransportSentinel = errors.New("transport sentinel")
 
-	c := &oauth2ClientTemplate{
-		httpClient: &http.Client{
+	c := &discoveryConfiguration{
+		HTTPClient: &http.Client{
 			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
 				username, password, ok := req.BasicAuth()
 				assert.True(t, ok)
-				assert.Equal(t, "xyz", username)
+				assert.Equal(t, "REPLACED", username)
 				assert.Equal(t, "REPLACED", password)
 
 				return nil, errTransportSentinel
 			}),
 		},
-		template: &oauth2.Config{
-			ClientID:     "xyz",
-			ClientSecret: "{test_var}",
+		OAuth2: &template.OAuth2ConfigTemplate{
+			TemplateClientID:     "{client_id}",
+			TemplateClientSecret: "{client_secret}",
 			Endpoint: oauth2.Endpoint{
 				AuthStyle: oauth2.AuthStyleInHeader,
 			},
 		},
-		tokenParams: map[string]string{},
+		TokenParams: map[string]string{},
 	}
 
 	repl := caddy.NewEmptyReplacer()
-	repl.Set("test_var", "REPLACED")
+	repl.Set("client_id", "REPLACED")
+	repl.Set("client_secret", "REPLACED")
 
 	ctx := context.WithValue(t.Context(), caddy.ReplacerCtxKey, repl)
 
@@ -63,13 +64,13 @@ func TestOauth2ClientTemplate_Exchange_ReplacerVars(t *testing.T) {
 	require.ErrorIs(t, err, errTransportSentinel)
 }
 
-func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
+func TestDiscoveryConfiguration_Exchange_TokenParams(t *testing.T) {
 	t.Parallel()
 
 	var errTransportSentinel = errors.New("transport sentinel")
 
-	c := &oauth2ClientTemplate{
-		httpClient: &http.Client{
+	c := &discoveryConfiguration{
+		HTTPClient: &http.Client{
 			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
 				err := req.ParseForm()
 				require.NoError(t, err)
@@ -79,13 +80,13 @@ func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
 				return nil, errTransportSentinel
 			}),
 		},
-		template: &oauth2.Config{
-			ClientID: "xyz",
+		OAuth2: &template.OAuth2ConfigTemplate{
+			TemplateClientID: "xyz",
 			Endpoint: oauth2.Endpoint{
 				AuthStyle: oauth2.AuthStyleInParams,
 			},
 		},
-		tokenParams: map[string]string{
+		TokenParams: map[string]string{
 			"urn:ietf:params:oauth:client-assertion-type:jwt-bearer": "{client_assertion}",
 		},
 	}
@@ -97,33 +98,6 @@ func TestOAuth2ClientTemplate_Exchange_TokenParams(t *testing.T) {
 
 	_, err := c.Exchange(ctx, "test-code")
 	assert.ErrorIs(t, err, errTransportSentinel)
-}
-
-type testOAuthClientImpl struct{}
-
-func (testOAuthClientImpl) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string {
-	var oConfig = oauth2.Config{
-		ClientID:    "xyz",
-		RedirectURL: "https://localhost/oauth2/callback",
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "http://openid/example/authorize",
-			TokenURL: "http://openid/example/token",
-		},
-	}
-
-	return oConfig.AuthCodeURL(state, opts...)
-}
-
-func (testOAuthClientImpl) Exchange(_ context.Context, _ string, _ ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	return nil, errors.New("token exchange not supported in test")
-}
-
-func (testOAuthClientImpl) Scopes() []string {
-	return []string{"openid", "profile", "email", "offline_access"}
-}
-
-func (testOAuthClientImpl) ClientID() string {
-	return "xyz"
 }
 
 func GenerateTestProvider() *Provider {
@@ -156,10 +130,17 @@ func GenerateTestProvider() *Provider {
 		Issuer:            "https://openid/example",
 	}
 
-	provider.Discovery = deferred.Defer(func() (*providerDiscoveryConfiguration, error) {
-		return &providerDiscoveryConfiguration{
+	provider.Discovery = deferred.Defer(func() (*discoveryConfiguration, error) {
+		return &discoveryConfiguration{
 			Verifier: pkgtest.NewTestVerifier(provider.Clock),
-			OAuth2:   testOAuthClientImpl{},
+			OAuth2: &template.OAuth2ConfigTemplate{
+				TemplateClientID: "xyz",
+				Scopes:           []string{"openid", "profile", "email", "offline_access"},
+				Endpoint: oauth2.Endpoint{
+					AuthURL:  "http://openid/example/authorize",
+					TokenURL: "http://openid/example/token",
+				},
+			},
 		}, nil
 	})
 
@@ -171,7 +152,7 @@ func TestProvider_ProtectedResourceMetadata(t *testing.T) {
 
 	pr := GenerateTestProvider()
 
-	r := httptest.NewRequest(http.MethodGet, "http://example.com/endpoint?x=y", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "http://example.com/endpoint?x=y", nil)
 
 	metadata, ok := pr.ProtectedResourceMetadata(r)
 	assert.True(t, ok)
@@ -191,7 +172,12 @@ func TestProvider_ProtectedResourceMetadata_WithAudience(t *testing.T) {
 	pr := GenerateTestProvider()
 	pr.ProtectedResource.Audience = true
 
-	r := httptest.NewRequest(http.MethodGet, "http://example.com/endpoint?x=y", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "http://example.com/endpoint?x=y", nil)
+
+	d, _ := pr.Discovery.Get(r.Context())
+	d.OAuth2.TemplateClientID = "{client_id}"
+
+	template.MustReplacer(r.Context()).Set("client_id", "replaced")
 
 	metadata, ok := pr.ProtectedResourceMetadata(r)
 	assert.True(t, ok)
@@ -199,7 +185,7 @@ func TestProvider_ProtectedResourceMetadata_WithAudience(t *testing.T) {
 		Resource:               "http://example.com",
 		ScopesSupported:        []string{"openid", "profile", "email", "offline_access"},
 		BearerMethodsSupported: []string{"header"},
-		Audience:               "xyz",
+		Audience:               "replaced",
 		AuthorizationServers: []string{
 			"https://openid/example",
 		},

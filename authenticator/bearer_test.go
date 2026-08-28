@@ -2,7 +2,6 @@ package authenticator
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ func TestBearerAuthenticator_AuthenticateRequest(t *testing.T) {
 		au  BearerAuthenticator
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)))
 
 	s, err := au.AuthenticateRequest(&cfg, r)
@@ -37,7 +36,7 @@ func TestBearerAuthentication_AuthenticateRequest_WithoutBearerToken(t *testing.
 		au  BearerAuthenticator
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	_, err := au.AuthenticateRequest(&cfg, r)
 	assert.ErrorIs(t, err, ErrNoAuthentication)
@@ -51,7 +50,7 @@ func TestBearerAuthentication_AuthenticateRequest_InvalidBearerToken(t *testing.
 		au  BearerAuthenticator
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer xxxxx")
 
 	_, err := au.AuthenticateRequest(&cfg, r)
@@ -69,7 +68,7 @@ func TestBearerAuthentication_AuthenticateRequest_EmailForUsernameClaim(t *testi
 
 	cfg.UsernameClaim = "email"
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)))
 
 	s, err := au.AuthenticateRequest(&cfg, r)
@@ -87,7 +86,7 @@ func TestBearerAuthentication_AuthenticateRequest_MissingUsernameClaim(t *testin
 
 	cfg.UsernameClaim = "not exist"
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)))
 
 	_, err := au.AuthenticateRequest(&cfg, r)
@@ -106,7 +105,7 @@ func TestBearerAuthentication_AuthenticateRequest_BearerTokenExpired(t *testing.
 		au  BearerAuthenticator
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(-time.Hour)))
 
 	_, err := au.AuthenticateRequest(&cfg, r)
@@ -119,7 +118,7 @@ func TestBearerAuthentication_AuthenticateRequest_BearerTokenExpired(t *testing.
 func TestBearerAuthenticator_StripRequest(t *testing.T) {
 	t.Parallel()
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer xyz")
 
 	var au BearerAuthenticator

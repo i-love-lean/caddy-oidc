@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
@@ -111,7 +110,7 @@ func TestSet_AuthenticateRequest(t *testing.T) {
 		},
 	}
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	m, s, err := authenticatorSet.AuthenticateRequest(&cfg, r)
 	require.NoError(t, err)
@@ -127,7 +126,7 @@ func TestSet_AuthenticateRequest_NoAuthentication_Optional(t *testing.T) {
 		set Set
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	m, s, err := set.AuthenticateRequest(&cfg, r)
 	require.NoError(t, err)
@@ -145,7 +144,7 @@ func TestSet_AuthenticateRequest_NoAuthentication_Required(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	_, _, err := set.AuthenticateRequest(&cfg, r)
 
@@ -175,7 +174,7 @@ func TestSet_AuthenticateRequest_HandlesExpired(t *testing.T) {
 		},
 	}
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	_, s, err := set.AuthenticateRequest(&pkgtest.TestOIDCConfiguration{}, r)
 	require.NoError(t, err)
 	assert.True(t, s.Anonymous)
@@ -209,7 +208,7 @@ func TestSet_StripRequest(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	set.StripRequest(r)
 	assert.Equal(t, 1, au.StripRequestCalled)
 }
@@ -227,7 +226,7 @@ func TestSet_StripRequest_Preserve(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	set.StripRequest(r)
 	assert.Equal(t, 0, au.StripRequestCalled)
 }

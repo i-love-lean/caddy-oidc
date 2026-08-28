@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/relvacode/caddy-oidc/template"
 )
 
 //nolint:gochecknoglobals
@@ -82,7 +83,7 @@ func (c *TestOIDCConfiguration) Now() time.Time {
 	return c.clock()
 }
 
-func (c *TestOIDCConfiguration) GetVerifier(_ context.Context) (*oidc.IDTokenVerifier, error) {
+func (c *TestOIDCConfiguration) GetVerifier(_ context.Context) (template.TokenVerifier, error) {
 	if c.Verifier == nil {
 		c.Verifier = NewTestVerifier(c.Now)
 	}

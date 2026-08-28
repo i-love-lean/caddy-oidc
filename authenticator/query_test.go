@@ -2,7 +2,6 @@ package authenticator
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -34,7 +33,7 @@ func TestQueryAuthenticator_AuthenticateRequest(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/?api-key="+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)), nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/?api-key="+pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)), nil)
 
 	_, err := au.AuthenticateRequest(&cfg, r)
 	require.NoError(t, err)
@@ -50,7 +49,7 @@ func TestQueryAuthenticator_AuthenticateRequest_MissingQuery(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	_, err := au.AuthenticateRequest(&cfg, r)
 	assert.ErrorIs(t, err, ErrNoAuthentication)
@@ -63,7 +62,7 @@ func TestQueryAuthenticator_StripRequest(t *testing.T) {
 		Query: "api-key",
 	}
 
-	r := httptest.NewRequest(http.MethodGet, "/?api-key=xyz&foo=bar", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/?api-key=xyz&foo=bar", nil)
 
 	au.StripRequest(r)
 
