@@ -27,11 +27,13 @@ func TestReplacerTokenVerifier_Verify(t *testing.T) {
 
 	ctx := context.WithValue(t.Context(), caddy.ReplacerCtxKey, repl)
 
+	//nolint:paralleltest
 	t.Run("Without Placeholder Variable", func(t *testing.T) {
 		_, err := verifier.Verify(ctx, "")
 		assert.ErrorContains(t, err, "unrecognized placeholder")
 	})
 
+	//nolint:paralleltest
 	t.Run("With Valid Audience", func(t *testing.T) {
 		repl.Set("client_id", "b")
 
@@ -39,6 +41,7 @@ func TestReplacerTokenVerifier_Verify(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	//nolint:paralleltest
 	t.Run("With Invalid Audience", func(t *testing.T) {
 		repl.Set("client_id", "d")
 
@@ -47,5 +50,4 @@ func TestReplacerTokenVerifier_Verify(t *testing.T) {
 		var expectedErr ExpectedAudienceError
 		assert.ErrorAs(t, err, &expectedErr)
 	})
-
 }
