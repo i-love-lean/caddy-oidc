@@ -245,7 +245,7 @@ func (m *OIDCProviderModule) Create(ctx caddy.Context) (*Provider, error) {
 				return &discoveryConfiguration{
 					HTTPClient:  httpClient,
 					Provider:    provider,
-					Verifier:    template.NewTokenVerifierTemplate(m.ClientSecret, provider),
+					Verifier:    template.NewReplacerTokenVerifierFromProvider(m.ClientSecret, provider),
 					OAuth2:      oauthConfigTemplate,
 					TokenParams: m.TokenParams,
 				}, nil

@@ -13,16 +13,25 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, rawIDToken string) (*oidc.IDToken, error)
 }
 
+type ExpectedAudienceError struct {
+	Expected string
+	Actual   []string
+}
+
+func (err ExpectedAudienceError) Error() string {
+	return fmt.Sprintf("oidc: expected audience %q, got %q", err.Expected, err.Actual)
+}
+
 // ReplacerTokenVerifier wraps the behavior of the oidc.IDTokenVerifier
 // so that the client ID (audience) is verified using a request-time replaced value.
 type ReplacerTokenVerifier struct {
 	clientID string
-	verifier *oidc.IDTokenVerifier
+	verifier TokenVerifier
 }
 
-// NewTokenVerifierTemplate returns a new ReplacerTokenVerifier from the provided oidc.Provider,
+// NewReplacerTokenVerifierFromProvider returns a new ReplacerTokenVerifier from the provided oidc.Provider,
 // configuring the verifier to skip client ID check in favor of a request-time replaced client ID.
-func NewTokenVerifierTemplate(clientID string, provider *oidc.Provider) *ReplacerTokenVerifier {
+func NewReplacerTokenVerifierFromProvider(clientID string, provider *oidc.Provider) *ReplacerTokenVerifier {
 	return &ReplacerTokenVerifier{
 		clientID: clientID,
 		verifier: provider.Verifier(&oidc.Config{
@@ -45,7 +54,7 @@ func (t *ReplacerTokenVerifier) Verify(ctx context.Context, rawIDToken string) (
 	}
 
 	if !slices.Contains(token.Audience, clientID) {
-		return nil, fmt.Errorf("oidc: expected audience %q got %q", clientID, token.Audience)
+		return nil, ExpectedAudienceError{Expected: clientID, Actual: token.Audience}
 	}
 
 	return token, nil
