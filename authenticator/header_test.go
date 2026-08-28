@@ -2,7 +2,6 @@ package authenticator
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -34,7 +33,7 @@ func TestHeaderAuthenticator_AuthenticateRequest(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Api-Key", pkgtest.GenerateTestJWTExpiresAt(cfg.Now().Add(time.Hour)))
 
 	_, err := au.AuthenticateRequest(&cfg, r)
@@ -51,7 +50,7 @@ func TestHeaderAuthenticator_AuthenticateRequest_MissingHeader(t *testing.T) {
 		}
 	)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	_, err := au.AuthenticateRequest(&cfg, r)
 	assert.ErrorIs(t, err, ErrNoAuthentication)
@@ -64,7 +63,7 @@ func TestHeaderAuthenticator_StripRequest(t *testing.T) {
 		Header: "X-Api-Key",
 	}
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("X-Api-Key", "xyz")
 
 	au.StripRequest(r)

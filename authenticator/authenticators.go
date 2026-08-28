@@ -17,6 +17,7 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/relvacode/caddy-oidc/session"
+	"github.com/relvacode/caddy-oidc/template"
 	"github.com/tidwall/sjson"
 )
 
@@ -35,7 +36,7 @@ type OIDCConfiguration interface {
 	// Now returns the current time according to the OIDC configuration clock.
 	Now() time.Time
 	// GetVerifier returns the ID token verifier configured for the OIDC provider.
-	GetVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error)
+	GetVerifier(ctx context.Context) (template.TokenVerifier, error)
 	// GetUsernameClaim returns the claim name used to extract the username from the ID token.
 	GetUsernameClaim() string
 }

@@ -1,7 +1,6 @@
 package caddy_oidc
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -119,7 +118,7 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_AuthorizationFlowSupported(t *test
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Accept", "text/html")
 	r.Header.Set("Sec-Fetch-Mode", "same-origin")
 	r.Header.Set("Sec-Fetch-Dest", "empty")
@@ -163,7 +162,7 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_BearerOnly(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Sec-Fetch-Dest", "document")
 
 	h := new(TestHandler)
@@ -187,7 +186,7 @@ func TestOIDCMiddleware_ServeHTTP_WithoutAuth_NoRedirectSupport(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	h := new(TestHandler)
 
 	err := auth.ServeHTTP(w, r, h)
@@ -219,8 +218,7 @@ func TestOIDCMiddleware_ServeHTTP_BearerOK(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r = r.WithContext(context.WithValue(r.Context(), caddy.ReplacerCtxKey, caddy.NewReplacer()))
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	h := new(TestHandler)
@@ -239,7 +237,7 @@ func TestOIDCMiddleware_ServeHTTP_WithBearerAuthentication_EmptyRuleset(t *testi
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	h := new(TestHandler)
@@ -258,7 +256,8 @@ func TestOIDCMiddleware_ServeHTTP_WellKnownOAuthProtectedResource(t *testing.T) 
 	auth.provider.ProtectedResource.Audience = true
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
+
 	h := new(TestHandler)
 
 	err := auth.ServeHTTP(w, r, h)
@@ -295,7 +294,7 @@ func TestOIDCMiddleware_ServeHTTP_WellKnownOAuthProtectedResource_Disabled(t *te
 	auth.provider.ProtectedResource.Disable = true
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
 	h := new(TestHandler)
 
 	err := auth.ServeHTTP(w, r, h)
@@ -324,7 +323,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	repl := caddyhttp.NewTestReplacer(r)
@@ -406,7 +405,7 @@ func TestOIDCMiddleware_ServeHTTP_SetsReplacerVars_Header(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Authorization", "Bearer "+pkgtest.GenerateTestJWTExpiresAt(auth.provider.Clock().Add(time.Hour)))
 
 	caddyhttp.NewTestReplacer(r)

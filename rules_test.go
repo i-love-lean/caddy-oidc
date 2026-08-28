@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/relvacode/caddy-oidc/session"
+	"github.com/relvacode/caddy-oidc/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,17 +184,15 @@ func TestRuleset_Evaluate(t *testing.T) {
 			err = ruleset.Provision(pCtx)
 			require.NoError(t, err)
 
-			r := httptest.NewRequest(http.MethodGet, "/foo?foo=bar", nil)
+			r := pkgtest.NewRequest(http.MethodGet, "/foo?foo=bar", nil)
 			r.Header.Set("X-Api-Key", "xyz")
 			r.Header.Set("Referer", "https://example.com/page?q=123")
 			r = r.WithContext(context.WithValue(r.Context(), caddyhttp.VarsCtxKey, map[string]any{
 				caddyhttp.ClientIPVarKey: "127.0.0.1",
 			}))
 
-			repl := caddy.NewReplacer()
-			repl.Set("http.host", "example.com")
+			template.MustReplacer(r.Context()).Set("http.host", "example.com")
 
-			r = r.WithContext(context.WithValue(r.Context(), caddy.ReplacerCtxKey, repl))
 			r = r.WithContext(context.WithValue(r.Context(), SessionCtxKey, tt.session))
 
 			e, err := ruleset.Evaluate(r)

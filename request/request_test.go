@@ -3,9 +3,9 @@ package request
 import (
 	"crypto/tls"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
+	"github.com/relvacode/caddy-oidc/internal/pkgtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +20,7 @@ func TestURL(t *testing.T) {
 		{
 			name: "basic http",
 			request: func() *http.Request {
-				r := httptest.NewRequest(http.MethodGet, "http://localhost/path?query=1", nil)
+				r := pkgtest.NewRequest(http.MethodGet, "http://localhost/path?query=1", nil)
 
 				return r
 			},
@@ -29,7 +29,7 @@ func TestURL(t *testing.T) {
 		{
 			name: "https via TLS",
 			request: func() *http.Request {
-				r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+				r := pkgtest.NewRequest(http.MethodGet, "http://localhost/", nil)
 				r.TLS = &tls.ConnectionState{}
 
 				return r
@@ -39,7 +39,7 @@ func TestURL(t *testing.T) {
 		{
 			name: "https via X-Forwarded-Proto",
 			request: func() *http.Request {
-				r := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+				r := pkgtest.NewRequest(http.MethodGet, "http://localhost/", nil)
 				r.Header.Set("X-Forwarded-Proto", "https")
 
 				return r
@@ -49,7 +49,7 @@ func TestURL(t *testing.T) {
 		{
 			name: "host from X-Forwarded-Host",
 			request: func() *http.Request {
-				r := httptest.NewRequest(http.MethodGet, "http://localhost/foo", nil)
+				r := pkgtest.NewRequest(http.MethodGet, "http://localhost/foo", nil)
 				r.Header.Set("X-Forwarded-Host", "example.com")
 
 				return r
@@ -59,7 +59,7 @@ func TestURL(t *testing.T) {
 		{
 			name: "complex proxy headers",
 			request: func() *http.Request {
-				r := httptest.NewRequest(http.MethodPost, "http://internal-ip:8080/api", nil)
+				r := pkgtest.NewRequest(http.MethodPost, "http://internal-ip:8080/api", nil)
 				r.Host = "internal-ip:8080"
 				r.Header.Set("X-Forwarded-Proto", "https")
 				r.Header.Set("X-Forwarded-Host", "public.example.com")
@@ -87,27 +87,27 @@ func TestShouldStartLogin(t *testing.T) {
 	t.Run("incorrect method", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r := pkgtest.NewRequest(http.MethodPost, "/", nil)
 		assert.False(t, IsBrowserInteractive(r))
 	})
 	t.Run("can't accept", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "application/json")
 		assert.False(t, IsBrowserInteractive(r))
 	})
 	t.Run("Sec-Fetch-Dest", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Sec-Fetch-Dest", "document")
 		assert.True(t, IsBrowserInteractive(r))
 	})
 	t.Run("navigation mode with empty destination", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Sec-Fetch-Mode", "navigate")
 		r.Header.Set("Sec-Fetch-Dest", "empty")
 		assert.True(t, IsBrowserInteractive(r))
@@ -115,7 +115,7 @@ func TestShouldStartLogin(t *testing.T) {
 	t.Run("service worker navigation", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "text/html")
 		r.Header.Set("Sec-Fetch-Mode", "same-origin")
 		r.Header.Set("Sec-Fetch-Dest", "empty")
@@ -125,7 +125,7 @@ func TestShouldStartLogin(t *testing.T) {
 	t.Run("non-navigation with empty destination", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "text/html")
 		r.Header.Set("Sec-Fetch-Mode", "same-origin")
 		r.Header.Set("Sec-Fetch-Dest", "empty")
@@ -134,7 +134,7 @@ func TestShouldStartLogin(t *testing.T) {
 	t.Run("service worker request without HTML", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "application/json")
 		r.Header.Set("Sec-Fetch-Mode", "same-origin")
 		r.Header.Set("Sec-Fetch-Dest", "empty")
@@ -144,7 +144,7 @@ func TestShouldStartLogin(t *testing.T) {
 	t.Run("accept HTML", func(t *testing.T) {
 		t.Parallel()
 
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Accept", "text/html")
 		assert.True(t, IsBrowserInteractive(r))
 	})

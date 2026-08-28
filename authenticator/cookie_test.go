@@ -145,7 +145,7 @@ func TestSessionCookieAuthenticator_GetAbsRedirectUri(t *testing.T) {
 				redirectURL: u,
 			}
 
-			r := httptest.NewRequest(http.MethodGet, "http://example.com/auth?bar=baz#xyz", nil)
+			r := pkgtest.NewRequest(http.MethodGet, "http://example.com/auth?bar=baz#xyz", nil)
 
 			assert.Equal(t, tt.expect, au.GetAbsRedirectURI(r).String())
 		})
@@ -169,7 +169,7 @@ func TestSessionCookieAuthenticator_AuthenticateRequest_WithCookie(t *testing.T)
 	err := au.Provision(ctx)
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	s := &session.Session{UID: "test"}
 	cookieValue, err := au.secure.Encode(au.Name, s)
@@ -200,7 +200,7 @@ func TestSessionCookieAuthenticator_AuthenticateRequest_WithCookieSignedByOther(
 	err := au.Provision(ctx)
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	s := &session.Session{UID: "test"}
 	cookieSigner := securecookie.New([]byte("EPb6FR6Uehz2uWdfhtb7l6c4tXzgMJT8"), []byte("EPb6FR6Uehz2uWdfhtb7l6c4tXzgMJT8"))
@@ -236,7 +236,7 @@ func TestSessionCookieAuthenticator_AuthenticateRequest_SessionExpired(t *testin
 	err := au.Provision(ctx)
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	s := &session.Session{UID: "test", ExpiresAt: cfg.Now().Add(-time.Hour).Unix()}
 	cookieValue, err := au.secure.Encode(au.Name, s)
@@ -265,7 +265,7 @@ func TestSessionCookieAuthenticator_Provision_64ByteSecret(t *testing.T) {
 	err := au.Provision(ctx)
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	s := &session.Session{UID: "test"}
 	cookieValue, err := au.secure.Encode(au.Name, s)
@@ -292,7 +292,7 @@ func TestSessionCookieAuthenticator_StripRequest(t *testing.T) {
 	err := au.Provision(ctx)
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/", nil)
 
 	r.Header.Add("Cookie", "some-other-cookie=foobar")
 	r.Header.Add("Cookie", "test-cookie=xyz; some-second-cookie=barfoo")
@@ -370,7 +370,7 @@ func TestSessionCookieAuthenticator_HandleCallback_CopiesClaimsAsRawJSON(t *test
 	})
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
 	csrfCookie := au.NewCookie(csrfCookieValue)
 	csrfCookie.Name = au.Name + "|" + state
 	r.AddCookie(csrfCookie)
@@ -447,7 +447,7 @@ func TestSessionCookieAuthenticator_HandleCallback_MaxAge(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	r := httptest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
+	r := pkgtest.NewRequest(http.MethodGet, "/oauth2/callback?state="+state+"&code=test-code", nil)
 	csrfCookie := au.NewCookie(csrfCookieValue)
 	csrfCookie.Name = au.Name + "|" + state
 	// NewCookie with MaxAge set also applies to CSRF cookie construction here;
