@@ -20,6 +20,8 @@ type ReplacerTokenVerifier struct {
 	verifier *oidc.IDTokenVerifier
 }
 
+// NewTokenVerifierTemplate returns a new ReplacerTokenVerifier from the provided oidc.Provider,
+// configuring the verifier to skip client ID check in favor of a request-time replaced client ID.
 func NewTokenVerifierTemplate(clientID string, provider *oidc.Provider) *ReplacerTokenVerifier {
 	return &ReplacerTokenVerifier{
 		clientID: clientID,

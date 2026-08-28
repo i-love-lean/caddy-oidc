@@ -30,7 +30,7 @@ func TestDiscoveryConfiguration_Exchange_ReplacerVars(t *testing.T) {
 	var errTransportSentinel = errors.New("transport sentinel")
 
 	c := &discoveryConfiguration{
-		HttpClient: &http.Client{
+		HTTPClient: &http.Client{
 			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
 				username, password, ok := req.BasicAuth()
 				assert.True(t, ok)
@@ -70,7 +70,7 @@ func TestDiscoveryConfiguration_Exchange_TokenParams(t *testing.T) {
 	var errTransportSentinel = errors.New("transport sentinel")
 
 	c := &discoveryConfiguration{
-		HttpClient: &http.Client{
+		HTTPClient: &http.Client{
 			Transport: HTTPTransportFunc(func(req *http.Request) (*http.Response, error) {
 				err := req.ParseForm()
 				require.NoError(t, err)

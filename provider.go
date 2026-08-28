@@ -19,7 +19,7 @@ import (
 )
 
 type discoveryConfiguration struct {
-	HttpClient  *http.Client
+	HTTPClient  *http.Client
 	Provider    *oidc.Provider
 	Verifier    template.TokenVerifier
 	OAuth2      *template.OAuth2ConfigTemplate
@@ -40,7 +40,7 @@ func (cfg *discoveryConfiguration) AuthCodeURL(ctx context.Context, state string
 func (cfg *discoveryConfiguration) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
 	repl := template.MustReplacer(ctx)
 
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HttpClient)
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HTTPClient)
 
 	oauthCfg, err := cfg.OAuth2.Replace(repl)
 	if err != nil {
@@ -62,7 +62,7 @@ func (cfg *discoveryConfiguration) Exchange(ctx context.Context, code string, op
 }
 
 func (cfg *discoveryConfiguration) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource) (*oidc.UserInfo, error) {
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HttpClient)
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, cfg.HTTPClient)
 
 	return cfg.Provider.UserInfo(ctx, tokenSource)
 }
