@@ -15,6 +15,7 @@ func (t testTokenVerifier) Verify(_ context.Context, _ string) (*oidc.IDToken, e
 	return &oidc.IDToken{Audience: []string{"a", "b", "c"}}, nil
 }
 
+//nolint:tparallel
 func TestReplacerTokenVerifier_Verify(t *testing.T) {
 	t.Parallel()
 

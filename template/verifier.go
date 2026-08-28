@@ -13,6 +13,7 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, rawIDToken string) (*oidc.IDToken, error)
 }
 
+// ExpectedAudienceError is returned when the audience of the ID token does not match the expected audience.
 type ExpectedAudienceError struct {
 	Expected string
 	Actual   []string
