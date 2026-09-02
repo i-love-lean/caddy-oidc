@@ -10,10 +10,10 @@ import (
 
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/relvacode/caddy-oidc/authenticator"
-	"github.com/relvacode/caddy-oidc/internal/deferred"
-	"github.com/relvacode/caddy-oidc/request"
-	"github.com/relvacode/caddy-oidc/template"
+	"github.com/i-love-lean/caddy-oidc/authenticator"
+	"github.com/i-love-lean/caddy-oidc/internal/deferred"
+	"github.com/i-love-lean/caddy-oidc/request"
+	"github.com/i-love-lean/caddy-oidc/template"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )

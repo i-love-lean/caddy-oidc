@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/relvacode/caddy-oidc/internal/pkgtest"
+	"github.com/i-love-lean/caddy-oidc/internal/pkgtest"
 	"github.com/stretchr/testify/assert"
 )
 

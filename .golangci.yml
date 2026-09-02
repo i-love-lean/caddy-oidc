@@ -78,7 +78,7 @@ linters:
         main:
           allow:
             - $gostd
-            - github.com/relvacode/caddy-oidc
+            - github.com/i-love-lean/caddy-oidc
             - github.com/caddyserver/caddy/v2
             - github.com/tidwall/gjson
             - github.com/tidwall/sjson

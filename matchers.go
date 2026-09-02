@@ -9,8 +9,8 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/relvacode/caddy-oidc/authenticator"
-	"github.com/relvacode/caddy-oidc/session"
+	"github.com/i-love-lean/caddy-oidc/authenticator"
+	"github.com/i-love-lean/caddy-oidc/session"
 	"github.com/tidwall/gjson"
 )
 

@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/relvacode/caddy-oidc/authenticator"
-	"github.com/relvacode/caddy-oidc/internal/pkgtest"
-	"github.com/relvacode/caddy-oidc/session"
-	"github.com/relvacode/caddy-oidc/template"
+	"github.com/i-love-lean/caddy-oidc/authenticator"
+	"github.com/i-love-lean/caddy-oidc/internal/pkgtest"
+	"github.com/i-love-lean/caddy-oidc/session"
+	"github.com/i-love-lean/caddy-oidc/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

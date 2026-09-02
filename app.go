@@ -10,8 +10,8 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	_ "github.com/relvacode/caddy-oidc/authenticator" // Registers the built-in authenticator modules
-	"github.com/relvacode/caddy-oidc/internal/baseline"
+	_ "github.com/i-love-lean/caddy-oidc/authenticator" // Registers the built-in authenticator modules
+	"github.com/i-love-lean/caddy-oidc/internal/baseline"
 )
 
 const moduleID = "oidc"

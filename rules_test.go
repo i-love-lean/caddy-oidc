@@ -9,9 +9,9 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/relvacode/caddy-oidc/internal/pkgtest"
-	"github.com/relvacode/caddy-oidc/session"
-	"github.com/relvacode/caddy-oidc/template"
+	"github.com/i-love-lean/caddy-oidc/internal/pkgtest"
+	"github.com/i-love-lean/caddy-oidc/session"
+	"github.com/i-love-lean/caddy-oidc/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

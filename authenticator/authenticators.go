@@ -16,8 +16,8 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/relvacode/caddy-oidc/session"
-	"github.com/relvacode/caddy-oidc/template"
+	"github.com/i-love-lean/caddy-oidc/session"
+	"github.com/i-love-lean/caddy-oidc/template"
 	"github.com/tidwall/sjson"
 )
 

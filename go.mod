@@ -1,4 +1,4 @@
-module github.com/relvacode/caddy-oidc
+module github.com/i-love-lean/caddy-oidc
 
 go 1.25.9
 
