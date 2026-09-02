@@ -395,7 +395,7 @@ func (au *SessionCookieAuthenticator) StartLogin(cfg OAuthAuthorizationFlowConfi
 		state             = uuid.New().String()
 		pkceVerifier      = oauth2.GenerateVerifier()
 		csrfCookieName    = fmt.Sprintf("%s|%s", au.Name, state)
-		csrfCookiePayload = &CSRFToken{PKCEVerifier: pkceVerifier, RedirectURI: r.RequestURI}
+		csrfCookiePayload = &CSRFToken{PKCEVerifier: pkceVerifier, RedirectURI: request.URL(r).String()}
 	)
 
 	csrfCookieValue, err := au.secure.Encode(csrfCookieName, csrfCookiePayload)
