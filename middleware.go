@@ -202,6 +202,11 @@ func (mw *OIDCMiddleware) interceptRequest(rw http.ResponseWriter, r *http.Reque
 	}
 
 	authMethod, s, err := mw.provider.Authenticators.AuthenticateRequest(mw.provider, r)
+	if s != nil && s.Anonymous && r.Method == http.MethodGet {
+		if cookie, ok := authenticator.GetAuthenticator[*authenticator.SessionCookieAuthenticator](&mw.provider.Authenticators); ok && cookie.IsRelayedCallback(r) {
+			return true, cookie.HandleCallback(mw.provider, rw, r)
+		}
+	}
 	if err != nil {
 		return false, err
 	}

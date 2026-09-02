@@ -2,12 +2,16 @@ package authenticator
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -387,16 +391,69 @@ func (au *SessionCookieAuthenticator) GetAbsRedirectURI(r *http.Request) *url.UR
 	return request.URL(r).ResolveReference(au.redirectURL)
 }
 
+func (au *SessionCookieAuthenticator) signRelayURL(u string) string {
+	mac := hmac.New(sha256.New, []byte(au.Secret))
+	_, _ = mac.Write([]byte(u))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (au *SessionCookieAuthenticator) parseRelayState(state string) (*url.URL, bool) {
+	_, rest, ok := strings.Cut(state, ".")
+	if !ok {
+		return nil, false
+	}
+	i := strings.LastIndex(rest, ".")
+	if i == -1 {
+		return nil, false
+	}
+	relayURL := rest[:i]
+	signature := rest[i+1:]
+	if !hmac.Equal([]byte(signature), []byte(au.signRelayURL(relayURL))) {
+		return nil, false
+	}
+	relay, err := url.Parse(relayURL)
+	if err != nil || relay.Host == "" || (relay.Scheme != "http" && relay.Scheme != "https") {
+		return nil, false
+	}
+	return relay, true
+}
+
+func (au *SessionCookieAuthenticator) IsRelayedCallback(r *http.Request) bool {
+	_, ok := au.parseRelayState(r.FormValue("state"))
+	return ok
+}
+
+func (au *SessionCookieAuthenticator) relayTarget(r *http.Request) (*url.URL, bool) {
+	relay, ok := au.parseRelayState(r.FormValue("state"))
+	if !ok || relay.Host == request.URL(r).Host {
+		return nil, false
+	}
+	query := relay.Query()
+	for key, values := range r.URL.Query() {
+		for _, value := range values {
+			query.Add(key, value)
+		}
+	}
+	relay.RawQuery = query.Encode()
+	return relay, true
+}
+
 // StartLogin starts the authorization flow by setting the state cookie and redirecting to the authorization endpoint.
 // The state cookie is in the format of `<cookie_name>|<state>`, with the value containing the PKCE code verifier.
 // The OAuth2 redirect URI is set to the configured redirect URI made absolute relative to the request URL.
 func (au *SessionCookieAuthenticator) StartLogin(cfg OAuthAuthorizationFlowConfiguration, rw http.ResponseWriter, r *http.Request) error {
 	var (
-		state             = uuid.New().String()
+		stateID           = uuid.New().String()
+		state             = stateID
 		pkceVerifier      = oauth2.GenerateVerifier()
-		csrfCookieName    = fmt.Sprintf("%s|%s", au.Name, state)
-		csrfCookiePayload = &CSRFToken{PKCEVerifier: pkceVerifier, RedirectURI: request.URL(r).String()}
+		originalURL       = request.URL(r).String()
+		csrfCookieName    = fmt.Sprintf("%s|%s", au.Name, stateID)
+		csrfCookiePayload = &CSRFToken{PKCEVerifier: pkceVerifier, RedirectURI: originalURL}
 	)
+
+	if au.redirectURL.IsAbs() {
+		state += "." + originalURL + "." + au.signRelayURL(originalURL)
+	}
 
 	csrfCookieValue, err := au.secure.Encode(csrfCookieName, csrfCookiePayload)
 	if err != nil {
@@ -425,7 +482,8 @@ func (au *SessionCookieAuthenticator) StartLogin(cfg OAuthAuthorizationFlowConfi
 // handleCallbackParseCSRFCookie parses the CSRF cookie from the request and returns the CSRF token payload.
 // If any CSRF cookie is found, then a Set-Cookie is sent to remove the cookie from the client.
 func (au *SessionCookieAuthenticator) handleCallbackParseCSRFCookie(rw http.ResponseWriter, r *http.Request) (*CSRFToken, error) {
-	var csrfCookieName = fmt.Sprintf("%s|%s", au.Name, r.FormValue("state"))
+	stateID, _, _ := strings.Cut(r.FormValue("state"), ".")
+	var csrfCookieName = fmt.Sprintf("%s|%s", au.Name, stateID)
 
 	csrfCookie, err := r.Cookie(csrfCookieName)
 	if err != nil {
@@ -530,6 +588,11 @@ func (au *SessionCookieAuthenticator) IsCallbackURL(r *http.Request) bool {
 
 // HandleCallback handles the callback from the authorization endpoint.
 func (au *SessionCookieAuthenticator) HandleCallback(cfg OAuthAuthorizationFlowConfiguration, rw http.ResponseWriter, r *http.Request) error {
+	if relay, ok := au.relayTarget(r); ok {
+		http.Redirect(rw, r, relay.String(), http.StatusFound)
+		return nil
+	}
+
 	if errValue := r.FormValue("error"); errValue != "" {
 		return caddyhttp.Error(http.StatusBadRequest, fmt.Errorf("error: %s, description: %s", errValue, r.FormValue("error_description")))
 	}
